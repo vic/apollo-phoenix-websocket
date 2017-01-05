@@ -1,5 +1,7 @@
 # Apollo Phoenix Websocket
 
+<a href="https://travis-ci.org/vic/apollo-phoenix-websocket"><img src="https://travis-ci.org/vic/apollo-phoenix-websocket.svg"></a>
+
 This node module implements an [Apollo GraphQL Network Layer] using [Phoenix Channels]
 
 ## Installation
@@ -23,7 +25,6 @@ const networkInterface = createNetworkInterface({
 })
 
 const apollo = new ApolloClient({networkInterface})
-
 ```
 
 ## Options
@@ -50,7 +51,7 @@ These other
 You can use middlewares with `use` and `afterUse`
 just like with the standard apollo network interface.
 
-```
+```javascript
 networkInterface.use({applyMiddleware: function beforeRequest({request, options}, next) {
   // Here you can modify the interface options, for example
   // you can change the socket/channel that will handle the request
