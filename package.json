@@ -1,0 +1,41 @@
+{
+  "name": "apollo-phoenix-websocket",
+  "version": "0.1.0",
+  "description": "Apollo networkInterface using Phoenix websockets",
+  "main": "lib/index.js",
+  "scripts": {
+    "compile": "babel -d lib/ src",
+    "test": "mocha --compilers js:babel-register"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vic/apollo-phoenix-websocket.git"
+  },
+  "keywords": [
+    "apollo",
+    "phoenix",
+    "websocket",
+    "gql",
+    "graphql"
+  ],
+  "author": "Victor Borja <vborja@apache.org>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/vic/apollo-phoenix-websocket/issues"
+  },
+  "homepage": "https://github.com/vic/apollo-phoenix-websocket#readme",
+  "devDependencies": {
+    "babel-cli": "^6.18.0",
+    "babel-preset-es2015": "^6.18.0",
+    "babel-preset-stage-0": "^6.16.0",
+    "babel-register": "^6.18.0",
+    "chai": "^3.5.0",
+    "graphql-tag": "^1.1.2",
+    "mocha": "^3.2.0",
+    "sinon": "^1.17.7"
+  },
+  "dependencies": {
+    "apollo-client": "^0.6.0",
+    "ramda": "^0.23.0"
+  }
+}
