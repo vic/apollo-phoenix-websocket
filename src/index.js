@@ -56,9 +56,9 @@ function executeQuery(sockets, context) {
         chan.queue = []
         map(performQuery, queue)
       }).receive('error', err => {
-        chan.conn.leave();
-        chan.conn = null;
-        reject(err);
+        chan.conn.leave()
+        chan.conn = null
+        reject(err)
       })
     }
   }
@@ -68,15 +68,9 @@ function executeQuery(sockets, context) {
     const msg = context.options.channel.in_msg || "gql"
     const payload = printRequest(context.request)
     chan.conn.push(msg, payload)
-      .receive("ok", response => {
-        resolve(response)
-      })
-      .receive("error", reasons => {
-        reject(reasons)
-      })
-      .receive("timeout", _ => {
-        reject("timeout")
-      })
+      .receive("ok", resolve)
+      .receive("error", reject)
+      .receive("timeout", reject.bind(null, 'timeout'))
   }
 
   return new Promise(function (resolve, reject) {
@@ -86,9 +80,7 @@ function executeQuery(sockets, context) {
         queue: []
       }
       socket.conn.onOpen(joinChannel.bind(null, reject))
-      socket.conn.onError(err => {
-        reject(new Error(err))
-      })
+      socket.conn.onError(reject)
     }
     if (chan.conn && chan.conn.isJoined()) {
       performQuery({context, resolve, reject})
