@@ -53,6 +53,17 @@ describe('phoenix websockets networkInterface', function () {
     }).catch(console.log)
   })
 
+  it('rejects if not possible to connect socket', function (done) {
+    const iface = createNetworkInterface(options)
+    options.transport
+      .addReply(_ => ({status: "error", response: {status: "error"}}))
+      .addReply(_ => ({status: "ok", response: {status: "leaved"}}))
+    iface.query({query}).catch(error => {
+      assert(error instanceof Error)
+      done()
+    })
+  })
+
   it('expects server to return data or error', function (done) {
     const iface = createNetworkInterface(options)
     options.transport

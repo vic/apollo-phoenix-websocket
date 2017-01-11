@@ -85,7 +85,7 @@ function executeQuery(sockets, context) {
         conn: null,
         queue: []
       }
-      socket.conn.onOpen(joinChannel)
+      socket.conn.onOpen(joinChannel.bind(null, reject))
       socket.conn.onError(err => {
         reject(new Error(err))
       })
