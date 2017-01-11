@@ -43,7 +43,7 @@ describe('phoenix websockets networkInterface', function () {
       ctx.response = {data: {modified: true}}
       next()
     }
-    iface.afterUse([{applyMiddleware}])
+    iface.useAfter([{applyMiddleware}])
 
     iface.query({query}).then(({data}) => {
       assert.deepEqual(data, {modified: true})

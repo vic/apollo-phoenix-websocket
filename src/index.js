@@ -111,7 +111,7 @@ export function createNetworkInterface(ifaceOpts) {
   const afterwares = []
 
   const use = map(item => middlewares.push(item))
-  const afterUse = map(item => afterwares.push(item))
+  const useAfter = map(item => afterwares.push(item))
 
   const requestMiddleware = (request) => {
     const options = clone(ifaceOpts)
@@ -128,5 +128,5 @@ export function createNetworkInterface(ifaceOpts) {
                       responseMiddleware,
                       responseData)
 
-  return {query, use, afterUse}
+  return {query, use, useAfter}
 }
