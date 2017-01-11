@@ -34,7 +34,7 @@ describe('phoenix websockets networkInterface', function () {
     }).catch(console.log)
   })
 
-  it('supports adding afterware with afterUse', function (done) {
+  it('supports adding afterware with useAfter', function (done) {
     const iface = createNetworkInterface(options)
     options.transport.replies
       .push(payload => ({status: "ok", response: {data: payload}}))

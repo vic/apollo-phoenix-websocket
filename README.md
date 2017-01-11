@@ -35,7 +35,7 @@ properties:
 - `uri`: The Phoenix websocket uri to connect into
 - `channel.topic`: A topic name where graphql queries will be sent
 
-These other
+These other have default values:
 
 - `params`: The params sent to Phoenix when connecting to the socket
 - `channel.params`: The params sent to Phoenix when joining the channel
@@ -44,26 +44,27 @@ These other
 - `Socket`: A Phoenix Socket js implementation, if not specified it will
             be the bundled `require('./phoenix').Socket`
 - `logger`: A function or `true` used for debugging.
-- anyother option to be passed as `Socket` option.
 
 ## Middlewares
 
-You can use middlewares with `use` and `afterUse`
+You can use middlewares with `use` and `useAfter`
 just like with the standard apollo network interface.
 
 ```javascript
-networkInterface.use({applyMiddleware: function beforeRequest({request, options}, next) {
-  // Here you can modify the interface options, for example
-  // you can change the socket/channel that will handle the request
-  // For example for a channel expecting authenticated queries
-  options.channel.topic = "gql:secured"
-  options.channel.params = {token: "phoenix_token"}
+networkInterface.use([{
+  applyMiddleware({request, options}, next) {
+    // Here you can modify the interface options, for example
+    // you can change the socket/channel that will handle the request
+    // For example for a channel expecting authenticated queries
+    options.channel.topic = "gql:secured"
+    options.channel.params = {token: "phoenix_token"}
 
-  // Or Modify the request
-  request.variables = {name: 'Luke'}
+    // Or Modify the request
+    request.variables = {name: 'Luke'}
 
-  next()
-}})
+    next()
+  }
+}])
 ```
 
 ## Phoenix Channel
