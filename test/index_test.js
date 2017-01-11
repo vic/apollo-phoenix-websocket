@@ -56,10 +56,21 @@ describe('phoenix websockets networkInterface', function () {
   it('rejects if not possible to connect socket', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "error", response: {status: "error"}}))
-      .addReply(_ => ({status: "ok", response: {status: "leaved"}}))
+      .addReply(_ => ({status: 'error', response: 'socket not connected'}))
+      .addReply(_ => ({status: 'ok', response: "socket leaved"}))
     iface.query({query}).catch(error => {
-      assert(error instanceof Error)
+      assert.equal("socket not connected", error)
+      done()
+    })
+  })
+
+  it('rejects if not possible to join channel', function (done) {
+    const iface = createNetworkInterface(options)
+    options.transport
+      .addReply(_ => ({status: 'ok', response: 'socket connected'}))
+      .addReply(_ => ({status: 'error', response: 'channel join error'}))
+    iface.query({query}).catch(error => {
+      assert.equal('channel join error', error)
       done()
     })
   })

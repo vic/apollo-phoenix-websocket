@@ -58,7 +58,7 @@ function executeQuery(sockets, context) {
       }).receive('error', err => {
         chan.conn.leave();
         chan.conn = null;
-        reject(new Error(err));
+        reject(err);
       })
     }
   }
