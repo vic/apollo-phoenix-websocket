@@ -7,7 +7,7 @@ function applyWares (ctx, wares) {
       const next = function () {
         if (funcs.length > 0) {
           const f = funcs.shift()
-          f.applyMiddleware.apply(scope, [ctx, next])
+          (f.applyMiddleware || f.applyAfterware).apply(scope, [ctx, next]);
         }
         else {
           resolve(ctx)
