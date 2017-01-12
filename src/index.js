@@ -57,7 +57,6 @@ function executeQuery(sockets, context) {
         chan.queue = []
         map(performQuery, queue)
       }).receive('error', err => {
-        chan.conn.leave()
         chan.conn = null
         resolve(err)
       })
