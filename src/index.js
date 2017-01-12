@@ -43,7 +43,7 @@ function executeQuery(sockets, context) {
   const socket = sockets[uri]
   let chan = socket.channels[channel.topic]
 
-  function joinChannel(reject) {
+  function joinChannel(resolve) {
     if (! socket.conn.isConnected()) {
       return socket.conn.connect()
     }
@@ -58,7 +58,7 @@ function executeQuery(sockets, context) {
       }).receive('error', err => {
         chan.conn.leave()
         chan.conn = null
-        reject(err)
+        resolve(err)
       })
     }
   }
@@ -69,7 +69,7 @@ function executeQuery(sockets, context) {
     const payload = printRequest(context.request)
     chan.conn.push(msg, payload)
       .receive("ok", resolve)
-      .receive("error", reject)
+      .receive("error", resolve)
       .receive("timeout", reject.bind(null, 'timeout'))
   }
 
@@ -79,14 +79,14 @@ function executeQuery(sockets, context) {
         conn: null,
         queue: []
       }
-      socket.conn.onOpen(joinChannel.bind(null, reject))
-      socket.conn.onError(reject)
+      socket.conn.onOpen(joinChannel.bind(null, resolve))
+      socket.conn.onError(resolve)
     }
     if (chan.conn && chan.conn.isJoined()) {
       performQuery({context, resolve, reject})
     } else {
       chan.queue.push({context, resolve, reject})
-      joinChannel(reject)
+      joinChannel(resolve)
     }
   })
 }
