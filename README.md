@@ -119,7 +119,7 @@ end
 # Made with love <3
 
 If you want to provide feedback or even better if you want to contribute some code feel free to open a [new issue]. 
-Possible thanks to the code of [our contributors].
+Possible thanks to the awesome work of [our contributors].
 
 
 [Apollo GraphQL Network Layer]: http://dev.apollodata.com/core/network.html
