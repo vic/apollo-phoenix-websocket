@@ -47,8 +47,8 @@ These other have default values:
 
 ## Middlewares
 
-You can use middlewares with `use` and `useAfter`
-just like with the standard apollo network interface.
+You can use middlewares with `use` just like with
+the standard apollo network interface.
 
 ```javascript
 networkInterface.use([{
@@ -63,6 +63,23 @@ networkInterface.use([{
     request.variables = {name: 'Luke'}
 
     next()
+  }
+}])
+```
+
+## Afterware
+
+You can use afterwares with `useAfter` just like the standard
+apollo network interface. An example use-case is for error handling:
+
+```javascript
+networkInterface.useAfter([{
+  applyAfterware({response, options}, next) {
+    // throw an error that will trigger your error handler
+    if (response.error) {
+      throw new Error(response.error)
+    }
+    next();
   }
 }])
 ```
