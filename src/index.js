@@ -43,15 +43,7 @@ function executeQuery(sockets, context) {
   const socket = sockets[uri]
   let chan = socket.channels[channel.topic]
 
-  if(! chan) {
-    chan = socket.channels[channel.topic] = {
-      conn: null,
-      queue: []
-    }
-    socket.conn.onOpen(joinChannel)
-  }
-
-  function joinChannel() {
+  function joinChannel(reject) {
     if (! socket.conn.isConnected()) {
       return socket.conn.connect()
     }
@@ -63,6 +55,10 @@ function executeQuery(sockets, context) {
         const queue = chan.queue
         chan.queue = []
         map(performQuery, queue)
+      }).receive('error', err => {
+        chan.conn.leave()
+        chan.conn = null
+        reject(err)
       })
     }
   }
@@ -72,23 +68,25 @@ function executeQuery(sockets, context) {
     const msg = context.options.channel.in_msg || "gql"
     const payload = printRequest(context.request)
     chan.conn.push(msg, payload)
-      .receive("ok", response => {
-        resolve(response)
-      })
-      .receive("error", reasons => {
-        reject(reasons)
-      })
-      .receive("timeout", _ => {
-        reject("timeout")
-      })
+      .receive("ok", resolve)
+      .receive("error", reject)
+      .receive("timeout", reject.bind(null, 'timeout'))
   }
 
   return new Promise(function (resolve, reject) {
+    if(! chan) {
+      chan = socket.channels[channel.topic] = {
+        conn: null,
+        queue: []
+      }
+      socket.conn.onOpen(joinChannel.bind(null, reject))
+      socket.conn.onError(reject)
+    }
     if (chan.conn && chan.conn.isJoined()) {
       performQuery({context, resolve, reject})
     } else {
       chan.queue.push({context, resolve, reject})
-      joinChannel()
+      joinChannel(reject)
     }
   })
 }

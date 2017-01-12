@@ -19,8 +19,9 @@ describe('phoenix websockets networkInterface', function () {
 
   it('supports adding middleware with use', function (done) {
     const iface = createNetworkInterface(options)
-    options.transport.replies
-      .push(payload => ({status: "ok", response: {data: payload}}))
+    options.transport
+      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(payload => ({status: "ok", response: {data: payload}}))
 
     const applyMiddleware = function (ctx, next) {
       ctx.request.applied = true
@@ -36,8 +37,9 @@ describe('phoenix websockets networkInterface', function () {
 
   it('supports adding afterware with useAfter', function (done) {
     const iface = createNetworkInterface(options)
-    options.transport.replies
-      .push(payload => ({status: "ok", response: {data: payload}}))
+    options.transport
+      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(payload => ({status: "ok", response: {data: payload}}))
 
     const applyMiddleware = function (ctx, next) {
       ctx.response = {data: {modified: true}}
@@ -51,10 +53,33 @@ describe('phoenix websockets networkInterface', function () {
     }).catch(console.log)
   })
 
+  it('rejects if not possible to connect socket', function (done) {
+    const iface = createNetworkInterface(options)
+    options.transport
+      .addReply(_ => ({status: 'error', response: 'socket not connected'}))
+      .addReply(_ => ({status: 'ok', response: "socket leaved"}))
+    iface.query({query}).catch(error => {
+      assert.equal("socket not connected", error)
+      done()
+    })
+  })
+
+  it('rejects if not possible to join channel', function (done) {
+    const iface = createNetworkInterface(options)
+    options.transport
+      .addReply(_ => ({status: 'ok', response: 'socket connected'}))
+      .addReply(_ => ({status: 'error', response: 'channel join error'}))
+    iface.query({query}).catch(error => {
+      assert.equal('channel join error', error)
+      done()
+    })
+  })
+
   it('expects server to return data or error', function (done) {
     const iface = createNetworkInterface(options)
-    options.transport.replies
-      .push(payload => ({status: "ok", response: {}}))
+    options.transport
+      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(payload => ({status: "ok", response: {}}))
     iface.query({query}).catch(error => {
       assert.equal('No response', error)
       done()
@@ -63,8 +88,9 @@ describe('phoenix websockets networkInterface', function () {
 
   it('query resolves with server data', function (done) {
     const iface = createNetworkInterface(options)
-    options.transport.replies
-      .push(payload => ({status: "ok", response: {data: 22}}))
+    options.transport
+      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(payload => ({status: "ok", response: {data: 22}}))
     iface.query({query}).then(({data}) => {
       assert.equal(22, data)
       done()
@@ -73,8 +99,9 @@ describe('phoenix websockets networkInterface', function () {
 
   it('query rejects with server error', function (done) {
     const iface = createNetworkInterface(options)
-    options.transport.replies
-      .push(payload => ({status: "ok", response: {error: 22}}))
+    options.transport
+      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(payload => ({status: "ok", response: {error: 22}}))
     iface.query({query}).catch(({error}) => {
       assert.equal(22, error)
       done()
@@ -107,7 +134,10 @@ function FakeTransport () {
   }
 
   transport.replies = []
-  transport.replies.push(_ => ({status: "ok", response: {}}))
+  transport.addReply = (reply) => {
+    transport.replies.push(reply)
+    return transport
+  }
 
   return transport
 }
