@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "apollo-client": "^0.6.0",
+    "phoenix": "^1.2.1",
     "ramda": "^0.23.0"
   }
 }

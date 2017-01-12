@@ -1,5 +1,6 @@
 import {clone, pipeP, map} from 'ramda'
 import {printRequest} from 'apollo-client/transport/networkInterface'
+import {Socket as PhoenixSocket} from 'phoenix';
 
 function applyWares (ctx, wares) {
   return new Promise(function (resolve, reject) {
@@ -22,7 +23,7 @@ function applyWares (ctx, wares) {
 function executeQuery(sockets, context) {
   const {request, options} = context
   const {uri, channel} = options
-  const Socket = options.Socket || require('./phoenix').Socket
+  const Socket = options.Socket || PhoenixSocket
 
   if (! uri) throw "Missing options.uri"
   if (! channel) throw "Missing options.channel"

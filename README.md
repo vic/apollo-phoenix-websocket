@@ -42,7 +42,7 @@ These other have default values:
 - `channel.in_msg`: Name of the `handle_in` message on the channel, defaults to 'gql'
 
 - `Socket`: A Phoenix Socket js implementation, if not specified it will
-            be the bundled `require('./phoenix').Socket`
+            use the reference implementation from the [Phoenix Framework](https://github.com/phoenixframework/phoenix). If used within a Phoenix project, the generated `web/static/js/socket.js` can be used by passing as a parameter here.
 - `logger`: A function or `true` used for debugging.
 
 ## Middlewares
