@@ -2,7 +2,10 @@
   "name": "apollo-phoenix-websocket",
   "version": "0.4.1",
   "description": "Apollo networkInterface using Phoenix websockets",
-  "main": "src/index.js",
+  "main": "lib/index.js",
+  "files": [
+    "lib"
+  ],
   "scripts": {
     "compile": "babel -d lib/ src",
     "test": "mocha --compilers js:babel-register",
