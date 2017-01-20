@@ -83,7 +83,7 @@ function executeQuery(sockets, context) {
       }
       socket.conn.onOpen(joinChannel.bind(null, resolve))
       socket.conn.onError(err => {
-        if (chan.conn && (chan.conn.isJoined() || chan.conn.isJoining()) {
+        if (chan.conn && (chan.conn.isJoined() || chan.conn.isJoining())) {
           chan.conn.leave()
         }
         chan.queue = []
