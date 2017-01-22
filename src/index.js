@@ -57,7 +57,9 @@ function executeQuery(sockets, context) {
         chan.queue = []
         map(performQuery, queue)
       }).receive('error', err => {
+        chan.conn.leave()
         chan.conn = null
+        chan.queue.pop()
         resolve(err)
       })
     }
@@ -80,7 +82,13 @@ function executeQuery(sockets, context) {
         queue: []
       }
       socket.conn.onOpen(joinChannel.bind(null, resolve))
-      socket.conn.onError(resolve)
+      socket.conn.onError(err => {
+        if (chan.conn && (chan.conn.isJoined() || chan.conn.isJoining())) {
+          chan.conn.leave()
+        }
+        chan.queue = []
+        resolve(err)
+      })
     }
     if (chan.conn && chan.conn.isJoined()) {
       performQuery({context, resolve, reject})
