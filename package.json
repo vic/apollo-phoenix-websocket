@@ -1,6 +1,6 @@
 {
   "name": "apollo-phoenix-websocket",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Apollo networkInterface using Phoenix websockets",
   "main": "lib/index.js",
   "files": [
