@@ -104,7 +104,7 @@ function performSubscribe (processReponse, {conn}, {context}) {
   conn.on(msg, processReponse)
 }
 
-function performUnsubscribe (processReponse, {conn}) {
+function performUnsubscribe (processReponse, {conn}, {context}) {
   const msg = chanMsg(context)
   conn.off(msg, processReponse)
 }
