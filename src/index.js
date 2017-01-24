@@ -170,7 +170,7 @@ export function createNetworkInterface(ifaceOpts) {
 
     pipeP(requestMiddleware, doSubscribe)(request)
       .then(subscribeReponse => null) // processReponse? or discard
-      .catch(error => throw error) // could not subscribe
+      .catch(error => {throw error}) // could not subscribe
 
     return subID
   }
