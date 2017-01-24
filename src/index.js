@@ -98,10 +98,14 @@ function performQuery ({conn}, {context, resolve, reject}) {
     .receive("timeout", reject.bind(null, 'timeout'))
 }
 
-function performSubscribe (processReponse, {conn}, {context}) {
+function performSubscribe (processReponse, {conn}, {context, resolve, reject}) {
   const msg = chanMsg(context)
   const payload = printRequest(context.request)
   conn.on(msg, processReponse)
+  conn.push(msg, payload)
+    .receive("ok", resolve)
+    .receive("error", resolve)
+    .receive("timeout", reject.bind(null, 'timeout'))
 }
 
 function performUnsubscribe (processReponse, {conn}, {context}) {
