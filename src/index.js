@@ -20,7 +20,7 @@ function applyWares (ctx, wares) {
   })
 }
 
-function connect(sockets, performQuery, context) {
+function connect(sockets, performWhenConnected, context) {
   const {request, options} = context
   const {uri, channel} = options
   const Socket = options.Socket || PhoenixSocket
@@ -55,7 +55,7 @@ function connect(sockets, performQuery, context) {
       chan.conn.join().receive("ok", _ => {
         const queue = chan.queue
         chan.queue = []
-        map(performQuery.bind(null, chan), queue)
+        map(performWhenConnected.bind(null, chan), queue)
       }).receive('error', err => {
         chan.conn.leave()
         chan.conn = null
@@ -81,7 +81,7 @@ function connect(sockets, performQuery, context) {
       })
     }
     if (chan.conn && chan.conn.isJoined()) {
-      performQuery(chan, {context, resolve, reject})
+      performWhenConnected(chan, {context, resolve, reject})
     } else {
       chan.queue.push({context, resolve, reject})
       joinChannel(resolve)
