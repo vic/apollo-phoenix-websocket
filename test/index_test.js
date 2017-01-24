@@ -6,6 +6,9 @@ import gql from 'graphql-tag'
 
 describe('phoenix websockets networkInterface', function () {
 
+  const socketConnected = {status: 'ok', response: 'socket connected'}
+  const channelConnected = {status: 'ok', response: 'channel connected'}
+
   const query = gql`{ example }`
   const options = {
     uri: 'ws://example.com/socket',
@@ -20,7 +23,7 @@ describe('phoenix websockets networkInterface', function () {
   it('supports adding middleware with use', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {data: payload}}))
 
     const applyMiddleware = function (ctx, next) {
@@ -38,7 +41,7 @@ describe('phoenix websockets networkInterface', function () {
   it('supports adding afterware with useAfter', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {data: payload}}))
 
     const applyMiddleware = function (ctx, next) {
@@ -67,7 +70,7 @@ describe('phoenix websockets networkInterface', function () {
   it('rejects if not possible to join channel', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: 'ok', response: 'socket connected'}))
+      .addReply(_ => socketConnected)
       .addReply(_ => ({status: 'error', response: { error: 'channel join error' }}))
     iface.query({query}).catch(error => {
       assert.equal('channel join error', error.error)
@@ -78,8 +81,8 @@ describe('phoenix websockets networkInterface', function () {
   it('expects server to return data or error', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "ok", response: {}}))
-      .addReply(payload => ({status: "ok", response: {}}))
+      .addReply(_ => socketConnected)
+      .addReply(payload => ({status: "ok", response: {/*empty no data, no error*/} }))
     iface.query({query}).catch(error => {
       assert.equal('No response', error)
       done()
@@ -89,7 +92,7 @@ describe('phoenix websockets networkInterface', function () {
   it('query resolves with server data', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {data: 22}}))
     iface.query({query}).then(({data}) => {
       assert.equal(22, data)
@@ -100,13 +103,19 @@ describe('phoenix websockets networkInterface', function () {
   it('query rejects with server error', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {error: 22}}))
     iface.query({query}).catch(({error}) => {
       assert.equal(22, error)
       done()
     })
   })
+
+  it('subscribe uses middleware on request data to normalize channel options')
+  it('subscribe uses afterware when response arrives')
+  it('subscribe returns a subscription ID')
+  it('unsubscribe uses middlewares to normalize the channel options')
+  it('unsubscribe takes the sub ID and stops listenning')
 
 })
 

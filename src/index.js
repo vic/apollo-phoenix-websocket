@@ -1,33 +1,33 @@
 import {clone, pipeP, map} from 'ramda'
 import {printRequest} from 'apollo-client/transport/networkInterface'
-import {Socket as PhoenixSocket} from 'phoenix';
+import {Socket as PhoenixSocket} from 'phoenix'
+
+function syncApplyWares (ctx, wares) {
+  const funcs = wares.slice()
+  const next = function () {
+    if (funcs.length > 0) {
+      const f = funcs.shift()
+      f && (f.applyMiddleware || f.applyAfterware)(ctx, next)
+    }
+  }
+  next()
+  return ctx
+}
 
 function applyWares (ctx, wares) {
   return new Promise(function (resolve, reject) {
-    const queue = function (funcs, scope) {
-      const next = function () {
-        if (funcs.length > 0) {
-          const f = funcs.shift()
-          f && (f.applyMiddleware || f.applyAfterware).apply(scope, [ctx, next])
-        }
-        else {
-          resolve(ctx)
-        }
-      }
-      next()
-    }
-    queue(wares.slice())
+    resolve(syncApplyWares(ctx, wares))
   })
 }
 
-function executeQuery(sockets, context) {
+function connect(sockets, performQuery, context) {
   const {request, options} = context
   const {uri, channel} = options
   const Socket = options.Socket || PhoenixSocket
 
-  if (! uri) throw "Missing options.uri"
-  if (! channel) throw "Missing options.channel"
-  if (! channel.topic) throw "Missing options.channel.topic"
+  if (! uri) { throw "Missing options.uri" }
+  if (! channel) { throw "Missing options.channel" }
+  if (! channel.topic) { throw "Missing options.channel.topic" }
 
   if (options.logger === true) {
     options.logger = (kind, msg, data) =>
@@ -55,7 +55,7 @@ function executeQuery(sockets, context) {
       chan.conn.join().receive("ok", _ => {
         const queue = chan.queue
         chan.queue = []
-        map(performQuery, queue)
+        map(performQuery.bind(null, chan), queue)
       }).receive('error', err => {
         chan.conn.leave()
         chan.conn = null
@@ -63,16 +63,6 @@ function executeQuery(sockets, context) {
         resolve(err)
       })
     }
-  }
-
-
-  function performQuery ({context, resolve, reject}) {
-    const msg = context.options.channel.in_msg || "gql"
-    const payload = printRequest(context.request)
-    chan.conn.push(msg, payload)
-      .receive("ok", resolve)
-      .receive("error", resolve)
-      .receive("timeout", reject.bind(null, 'timeout'))
   }
 
   return new Promise(function (resolve, reject) {
@@ -91,7 +81,7 @@ function executeQuery(sockets, context) {
       })
     }
     if (chan.conn && chan.conn.isJoined()) {
-      performQuery({context, resolve, reject})
+      performQuery(chan, {context, resolve, reject})
     } else {
       chan.queue.push({context, resolve, reject})
       joinChannel(resolve)
@@ -99,7 +89,27 @@ function executeQuery(sockets, context) {
   })
 }
 
-const responseData = ({response}) => {
+function performQuery ({conn}, {context, resolve, reject}) {
+  const msg = chanMsg(context)
+  const payload = printRequest(context.request)
+  conn.push(msg, payload)
+    .receive("ok", resolve)
+    .receive("error", resolve)
+    .receive("timeout", reject.bind(null, 'timeout'))
+}
+
+function performSubscribe (processReponse, {conn}, {context}) {
+  const msg = chanMsg(context)
+  const payload = printRequest(context.request)
+  conn.on(msg, processReponse)
+}
+
+function performUnsubscribe (processReponse, {conn}) {
+  const msg = chanMsg(context)
+  conn.off(msg, processReponse)
+}
+
+function responseData ({response}) {
   return new Promise(function (resolve, reject) {
     if (response.error){
       reject(response)
@@ -109,6 +119,10 @@ const responseData = ({response}) => {
       reject('No response')
     }
   })
+}
+
+function chanMsg(context) {
+  return context.options.channel.in_msg || 'gql'
 }
 
 export function createNetworkInterface(ifaceOpts) {
@@ -129,10 +143,38 @@ export function createNetworkInterface(ifaceOpts) {
     return applyWares({response, options}, afterwares)
   }
 
+  const doQuery = connect.bind(null, sockets, performQuery)
   const query = pipeP(requestMiddleware,
-                      executeQuery.bind(null, sockets),
+                      doQuery,
                       responseMiddleware,
                       responseData)
 
-  return {query, use, useAfter}
+  const subscriptions = {}
+
+  function subscribe (request, responseCallback) {
+    // An integer that can be used to unsubscribe later
+    const subID = new Date().getTime()
+
+    const processReponse = (response) => {
+      pipeP(responseMiddleware, responseData)(response)
+        .then(responseCallback)
+        .catch(responseCallback.bind(null, null))
+    }
+
+    subscriptions[subID] = processReponse
+    const doSubscribe = connect.bind(
+      null, sockets, performSubscribe.bind(null, processReponse))
+    pipeP(requestMiddleware, doSubscribe)(request)
+
+    return subID
+  }
+
+  function unsubscribe (subID) {
+    const processReponse = subscriptions[subID]
+    const doUnsubscribe = connect.bind(
+      null, sockets, performUnsubscribe.bind(null, processReponse))
+    pipeP(requestMiddleware, doUnsubscribe)({subID})
+  }
+
+  return {query, use, useAfter, subscribe, unsubscribe}
 }
