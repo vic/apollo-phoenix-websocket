@@ -111,6 +111,8 @@ describe('phoenix websockets networkInterface', function () {
     })
   })
 
+  it('middleware context has operation value for query')
+  it('middleware context has operation value for subscription')
   it('subscribe uses middleware on request data to normalize channel options')
   it('subscribe uses afterware when response arrives')
   it('subscribe returns a subscription ID')

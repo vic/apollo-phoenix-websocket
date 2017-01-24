@@ -135,20 +135,20 @@ export function createNetworkInterface(ifaceOpts) {
   const use = map(item => middlewares.push(item))
   const useAfter = map(item => afterwares.push(item))
 
-  const requestMiddleware = (request) => {
+  const requestMiddleware = (meta) => (request) => {
     const options = clone(ifaceOpts)
-    return applyWares({request, options}, middlewares)
+    return applyWares({...meta, request, options}, middlewares)
   }
 
-  const responseMiddleware = (response) => {
+  const responseMiddleware = (meta) => (response) => {
     const options = clone(ifaceOpts)
-    return applyWares({response, options}, afterwares)
+    return applyWares({...meta, response, options}, afterwares)
   }
 
   const doQuery = connect.bind(null, sockets, performQuery)
-  const query = pipeP(requestMiddleware,
+  const query = pipeP(requestMiddleware({operation: 'query'}),
                       doQuery,
-                      responseMiddleware,
+                      responseMiddleware({operation: 'query'}),
                       responseData)
 
   const subscriptions = {}
@@ -158,7 +158,12 @@ export function createNetworkInterface(ifaceOpts) {
     const subID = new Date().getTime()
 
     const processReponse = (response) => {
-      pipeP(responseMiddleware, responseData)(response)
+      const adaptedResponse =
+            pipeP(responseMiddleware({operation: 'subscription'}),
+                  responseData)
+
+      /* expect response to be a node like callback (resp, error), is this apollo compatible? */
+      adaptedResponse(response)
         .then(responseCallback)
         .catch(responseCallback.bind(null, null))
     }
@@ -168,7 +173,7 @@ export function createNetworkInterface(ifaceOpts) {
     const doSubscribe = connect.bind(
       null, sockets, performSubscribe.bind(null, processReponse))
 
-    pipeP(requestMiddleware, doSubscribe)(request)
+    pipeP(requestMiddleware({operation: 'subscription'}), doSubscribe)(request)
       .then(subscribeReponse => null) // processReponse? or discard
       .catch(error => {throw error}) // could not subscribe
 
