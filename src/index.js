@@ -164,9 +164,13 @@ export function createNetworkInterface(ifaceOpts) {
     }
 
     subscriptions[subID] = processReponse
+
     const doSubscribe = connect.bind(
       null, sockets, performSubscribe.bind(null, processReponse))
+
     pipeP(requestMiddleware, doSubscribe)(request)
+      .then(subscribeReponse => null) // processReponse? or discard
+      .catch(error => throw error) // could not subscribe
 
     return subID
   }
