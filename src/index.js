@@ -100,12 +100,10 @@ function performQuery ({conn}, {context, resolve, reject}) {
 
 function performSubscribe (processReponse, {conn}, {context, resolve, reject}) {
   const msg = chanMsg(context)
-  const payload = printRequest(context.request)
+  // listen when subscription messages arrive
   conn.on(msg, processReponse)
-  conn.push(msg, payload)
-    .receive("ok", resolve)
-    .receive("error", resolve)
-    .receive("timeout", reject.bind(null, 'timeout'))
+  // the query will perform the subscription at server
+  performQuery({conn}, {context, resolve, reject})
 }
 
 function performUnsubscribe (processReponse, {conn}, {context}) {
