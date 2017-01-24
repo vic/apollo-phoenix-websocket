@@ -162,7 +162,8 @@ export function createNetworkInterface(ifaceOpts) {
 
 
     const processReponse = (response) => {
-      /* expect response to be a node like callback (resp, error), is this apollo compatible? */
+      /* expect a node like responseCallback(resp, error)
+         is this apollo compatible? */
       adaptedResponse(response)
         .then(responseCallback)
         .catch(responseCallback.bind(null, null))
