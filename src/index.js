@@ -157,11 +157,11 @@ export function createNetworkInterface(ifaceOpts) {
     // An integer that can be used to unsubscribe later
     const subID = new Date().getTime()
 
-    const processReponse = (response) => {
-      const adaptedResponse =
-            pipeP(responseMiddleware({operation: 'subscription'}),
-                  responseData)
+    const adaptedResponse = pipeP(
+      responseMiddleware({operation: 'subscription'}), responseData)
 
+
+    const processReponse = (response) => {
       /* expect response to be a node like callback (resp, error), is this apollo compatible? */
       adaptedResponse(response)
         .then(responseCallback)
@@ -173,8 +173,11 @@ export function createNetworkInterface(ifaceOpts) {
     const doSubscribe = connect.bind(
       null, sockets, performSubscribe.bind(null, processReponse))
 
-    pipeP(requestMiddleware({operation: 'subscription'}), doSubscribe)(request)
-      .then(subscribeReponse => null) // processReponse? or discard
+    const adaptedRequest = pipeP(
+      requestMiddleware({operation: 'subscription'}), doSubscribe)
+
+    adaptedRequest(request)
+      .then(subscribeReponse => null) // discard or processReponse?
       .catch(error => {throw error}) // could not subscribe
 
     return subID
