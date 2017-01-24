@@ -2,21 +2,21 @@ import {clone, pipeP, map} from 'ramda'
 import {printRequest} from 'apollo-client/transport/networkInterface'
 import {Socket as PhoenixSocket} from 'phoenix'
 
-function syncApplyWares (ctx, wares) {
-  const funcs = wares.slice()
-  const next = function () {
-    if (funcs.length > 0) {
-      const f = funcs.shift()
-      f && (f.applyMiddleware || f.applyAfterware)(ctx, next)
-    }
-  }
-  next()
-  return ctx
-}
-
 function applyWares (ctx, wares) {
   return new Promise(function (resolve, reject) {
-    resolve(syncApplyWares(ctx, wares))
+    const queue = function (funcs, scope) {
+      const next = function () {
+        if (funcs.length > 0) {
+          const f = funcs.shift()
+          f && (f.applyMiddleware || f.applyAfterware).apply(scope, [ctx, next])
+        }
+        else {
+          resolve(ctx)
+        }
+      }
+      next()
+    }
+    queue(wares.slice())
   })
 }
 
