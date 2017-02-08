@@ -35,9 +35,17 @@ function executeQuery(sockets, context) {
   }
 
   if(! sockets[uri]) {
-    sockets[uri] = {
-      conn: new Socket(uri, options),
-      channels: {}
+    if (typeof Socket === 'function') {
+      sockets[uri] = {
+        conn: Socket(),
+        channels: {}
+      }
+    }
+    else {
+      sockets[uri] = {
+        conn: new Socket(uri, options),
+        channels: {}
+      }
     }
   }
 
