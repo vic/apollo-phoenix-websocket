@@ -41,8 +41,9 @@ These other have default values:
 - `channel.params`: The params sent to Phoenix when joining the channel
 - `channel.in_msg`: Name of the `handle_in` message on the channel, defaults to 'gql'
 
-- `Socket`: A Phoenix Socket js implementation, if not specified it will
+- `Socket`: [class] - A Phoenix Socket js implementation, if not specified it will
             use the reference implementation from the [Phoenix Framework](https://github.com/phoenixframework/phoenix). If used within a Phoenix project, the generated `web/static/js/socket.js` can be used by passing as a parameter here.
+            [function] - A function may also be passed that returns an instance of a Phoenix Socket implementation.
 - `logger`: A function or `true` used for debugging.
 
 ## Middlewares
