@@ -1,6 +1,8 @@
 # Apollo Phoenix Websocket
 
 <a href="https://travis-ci.org/vic/apollo-phoenix-websocket"><img src="https://travis-ci.org/vic/apollo-phoenix-websocket.svg"></a>
+[![help maintain this lib](https://img.shields.io/badge/looking%20for%20maintainer-DM%20%40vborja-663399.svg)](https://twitter.com/vborja)
+
 
 This node module implements an [Apollo GraphQL Network Layer] using [Phoenix Channels]
 
