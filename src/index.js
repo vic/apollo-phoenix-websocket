@@ -1,4 +1,4 @@
-import {clone, pipeP, map} from 'ramda'
+import {clone, pipeP, map, isEmpty, isNil, either} from 'ramda'
 import {printRequest} from 'apollo-client/transport/networkInterface'
 import {Socket as PhoenixSocket} from 'phoenix';
 
@@ -107,11 +107,13 @@ function executeQuery(sockets, context) {
   })
 }
 
+const isEmptyOrNil = either(isEmpty, isNil)
+
 const responseData = ({response}) => {
   return new Promise(function (resolve, reject) {
-    if (!response) {
+    if (isEmptyOrNil(response)) {
       reject('No response')
-    } else if (response.data) {
+    } else if (!isEmptyOrNil(response.data)) {
       resolve(response)
     } else {
       reject(response)
