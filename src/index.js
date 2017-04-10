@@ -109,12 +109,12 @@ function executeQuery(sockets, context) {
 
 const responseData = ({response}) => {
   return new Promise(function (resolve, reject) {
-    if (response.error){
-      reject(response)
+    if (!response) {
+      reject('No response')
     } else if (response.data) {
       resolve(response)
     } else {
-      reject('No response')
+      reject(response)
     }
   })
 }
