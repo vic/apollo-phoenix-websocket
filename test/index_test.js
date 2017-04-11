@@ -10,7 +10,7 @@ describe('phoenix websockets networkInterface', function () {
   const options = {
     uri: 'ws://example.com/socket',
     channel: {topic: 'gql:query'},
-    //logger: true
+    logger: false
   }
 
   beforeEach(function () {
@@ -32,7 +32,7 @@ describe('phoenix websockets networkInterface', function () {
     iface.query({query}).then(({data}) => {
       assert(data.applied)
       done()
-    }).catch(console.log)
+    }).catch(assert.failure)
   })
 
   it('supports adding afterware with useAfter', function (done) {
@@ -108,13 +108,42 @@ describe('phoenix websockets networkInterface', function () {
     })
   })
 
+  it('when joinedOnce enqueues query execution', function (done) {
+    const iface = createNetworkInterface(options)
+
+    options.transport
+      .addReply(_ => ({status: "ok", response: {on: 'first connection'}}))
+      .addReply(payload => ({status: "ok", response: {data: 'first query'}}))
+
+    iface.query({query}).then(({data}) => {
+      assert.equal('first query', data)
+
+      // simulate server disconnection or app suspended
+      options.transport.close()
+
+      iface.query({query}).then(({data}) => {
+        assert.equal('reconnected query', data)
+        done()
+      })
+
+      // simulate server connects again and responds to second query
+      options.transport
+        .addReply(_ => ({status: "ok", response: {on: 'reconnected'}}))
+        .addReply(payload => ({status: "ok", response: {data: 'reconnected query'}}))
+      options.transport.open()
+    })
+  })
+
 })
 
+const SOCKET_STATES = {connecting: 0, open: 1, closing: 2, closed: 3}
+
 function FakeTransport () {
-  const SOCKET_STATES = {connecting: 0, open: 1, closing: 2, closed: 3}
+  let instance = null
 
   function transport (endpointURL) {
-    this.skipHeartbeat = true
+    instance = this
+    this.skipHeartbeat = false
     this.endpointURL = endpointURL
     this.readyState = SOCKET_STATES.closed
     this.send = function send(data) {
@@ -126,11 +155,9 @@ function FakeTransport () {
       this.onmessage({data: message})
     }.bind(this)
 
-    this._open = _ => {
-      this.readyState = SOCKET_STATES.open
-      this.onopen()
-    }
-    setTimeout(this._open, 0)
+    this.close = _ => _
+
+    setTimeout(transport.open, 0)
   }
 
   transport.replies = []
@@ -138,6 +165,17 @@ function FakeTransport () {
     transport.replies.push(reply)
     return transport
   }
+
+  transport.close = _ => {
+    instance.readyState = SOCKET_STATES.closed
+    instance.onclose({type: 'close', eventPhase: SOCKET_STATES.closing})
+  }
+
+  transport.open = _ => {
+    instance.readyState = SOCKET_STATES.open
+    instance.onopen()
+  }
+
 
   return transport
 }

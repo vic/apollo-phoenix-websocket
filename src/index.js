@@ -2,7 +2,7 @@ import {clone, pipeP, map, isEmpty, isNil, either} from 'ramda'
 import {printRequest} from 'apollo-client/transport/networkInterface'
 import {Socket as PhoenixSocket} from 'phoenix';
 
-function applyWares (ctx, wares) {
+const applyWares = (ctx, wares) => {
   return new Promise(function (resolve, reject) {
     const queue = function (funcs, scope) {
       const next = function () {
@@ -20,90 +20,102 @@ function applyWares (ctx, wares) {
   })
 }
 
-function executeQuery(sockets, context) {
-  const {request, options} = context
-  const {uri, channel} = options
+const createSocket = (options) => {
+  const {uri} = options
   const Socket = options.Socket || PhoenixSocket
 
-  if (! uri) throw "Missing options.uri"
+  if (typeof Socket.constructor === 'function') {
+    return new Socket(uri, options)
+  } else {
+    return Socket(uri, options)
+  }
+}
+
+
+const getSocket = (sockets, options) => {
+  if (options.logger === true) {
+    options.logger = (kind, msg, data) => console.log(
+      `Apollo websocket ${kind}: ${msg}`, data)
+  }
+
+  const {uri} = options
+  if (! uri) throw 'Missing apollo websocket options.uri'
+
+  if (sockets[uri]) {
+    return sockets[uri]
+  }
+
+  return sockets[uri] = {
+    conn: createSocket(options),
+    channels: {}
+  }
+}
+
+const getChannel = (socket, options) => {
+  const {channel} = options
+
   if (! channel) throw "Missing options.channel"
   if (! channel.topic) throw "Missing options.channel.topic"
 
-  if (options.logger === true) {
-    options.logger = (kind, msg, data) =>
-      console.log(`Apollo websocket ${kind}: ${msg}`, data)
-  }
-
-  if(! sockets[uri]) {
-    if (typeof Socket.constructor === 'function') {
-      sockets[uri] = {
-        conn: new Socket(uri, options),
-        channels: {}
-      }
-    }
-    else {
-      sockets[uri] = {
-        conn: Socket(),
-        channels: {}
-      }
+  if (socket.channels[channel.topic]) {
+    return socket.channels[channel.topic]
+  } else {
+    return socket.channels[channel.topic] = {
+      conn: socket.conn.channel(channel.topic,
+                                channel.params || {}),
+      queue: []
     }
   }
+}
 
-  const socket = sockets[uri]
-  let chan = socket.channels[channel.topic]
-
-  function joinChannel(resolve) {
-    if (! socket.conn.isConnected()) {
-      return socket.conn.connect()
-    }
-    if (! chan.conn) {
-      chan.conn = socket.conn.channel(channel.topic, channel.params || {})
-    }
-    if (!chan.conn.isJoined() && !chan.conn.isJoining()) {
-      chan.conn.join().receive("ok", _ => {
-        const queue = chan.queue
-        chan.queue = []
-        map(performQuery, queue)
-      }).receive('error', err => {
-        chan.conn.leave()
-        chan.conn = null
-        chan.queue.pop()
-        resolve(err)
-      })
-    }
+const socketConnect = (sockets, options) => new Promise((resolve, reject) => {
+  const socket = getSocket(sockets, options)
+  if (socket.conn.isConnected()) {
+    resolve(socket)
+  } else {
+    socket.conn.onOpen(_ => resolve(socket))
+    socket.conn.onError(reject)
+    socket.conn.connect()
   }
+})
 
 
-  function performQuery ({context, resolve, reject}) {
-    const msg = context.options.channel.in_msg || "gql"
-    const payload = printRequest(context.request)
-    chan.conn.push(msg, payload)
-      .receive("ok", resolve)
-      .receive("error", resolve)
-      .receive("timeout", reject.bind(null, 'timeout'))
+const channelJoin = (socket, options) => new Promise((resolve, reject) => {
+  const channel = getChannel(socket, options)
+  if (channel.conn.joinedOnce) {
+    resolve(channel)
+  } else if (!channel.conn.isJoining()){
+    channel.conn.join()
+      .receive('ok', _ => resolve(channel))
+      .receive('error', reject)
+      .receive('timeout', reject)
   }
+})
 
+
+const sendQuery = (channel, context) => new Promise((resolve, reject) => {
+  const {options, request} = context
+
+  const msg = options.channel.in_msg || 'gql'
+  const payload = printRequest(request)
+
+  channel.conn.push(msg, payload)
+    .receive('ok', resolve)
+    .receive('error', reject)
+    .receive('timeout', reject)
+})
+
+function executeQuery(sockets, context) {
   return new Promise(function (resolve, reject) {
-    if(! chan) {
-      chan = socket.channels[channel.topic] = {
-        conn: null,
-        queue: []
-      }
-      socket.conn.onOpen(joinChannel.bind(null, resolve))
-      socket.conn.onError(err => {
-        if (chan.conn && (chan.conn.isJoined() || chan.conn.isJoining())) {
-          chan.conn.leave()
-        }
-        chan.queue = []
-        resolve(err)
-      })
-    }
-    if (chan.conn && chan.conn.isJoined()) {
-      performQuery({context, resolve, reject})
-    } else {
-      chan.queue.push({context, resolve, reject})
-      joinChannel(resolve)
-    }
+    const {request, options} = context
+
+    const queryPromise = pipeP(
+      _ => socketConnect(sockets, options),
+      socket => channelJoin(socket, options),
+      channel => sendQuery(channel, context))
+
+    // let middleware handle any error
+    return queryPromise().then(resolve, resolve)
   })
 }
 
