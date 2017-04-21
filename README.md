@@ -1,6 +1,8 @@
 # Apollo Phoenix Websocket
 
 <a href="https://travis-ci.org/vic/apollo-phoenix-websocket"><img src="https://travis-ci.org/vic/apollo-phoenix-websocket.svg"></a>
+[![help maintain this lib](https://img.shields.io/badge/looking%20for%20maintainer-DM%20%40vborja-663399.svg)](https://twitter.com/vborja)
+
 
 This node module implements an [Apollo GraphQL Network Layer] using [Phoenix Channels]
 
@@ -41,8 +43,9 @@ These other have default values:
 - `channel.params`: The params sent to Phoenix when joining the channel
 - `channel.in_msg`: Name of the `handle_in` message on the channel, defaults to 'gql'
 
-- `Socket`: A Phoenix Socket js implementation, if not specified it will
+- `Socket`: [class] - A Phoenix Socket js implementation, if not specified it will
             use the reference implementation from the [Phoenix Framework](https://github.com/phoenixframework/phoenix). If used within a Phoenix project, the generated `web/static/js/socket.js` can be used by passing as a parameter here.
+            [function] - A function may also be passed that returns an instance of a Phoenix Socket implementation.
 - `logger`: A function or `true` used for debugging.
 
 ## Middlewares

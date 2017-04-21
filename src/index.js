@@ -1,8 +1,8 @@
-import {clone, pipeP, map} from 'ramda'
+import {clone, pipeP, map, isEmpty, isNil, either} from 'ramda'
 import {printRequest} from 'apollo-client/transport/networkInterface'
-import {Socket as PhoenixSocket} from 'phoenix'
+import {Socket as PhoenixSocket} from 'phoenix';
 
-function applyWares (ctx, wares) {
+const applyWares = (ctx, wares) => {
   return new Promise(function (resolve, reject) {
     const queue = function (funcs, scope) {
       const next = function () {
@@ -20,112 +20,132 @@ function applyWares (ctx, wares) {
   })
 }
 
-function connect(sockets, performWhenConnected, context) {
-  const {request, options} = context
-  const {uri, channel} = options
+const createSocket = (options) => {
+  const {uri} = options
   const Socket = options.Socket || PhoenixSocket
 
-  if (! uri) { throw "Missing options.uri" }
-  if (! channel) { throw "Missing options.channel" }
-  if (! channel.topic) { throw "Missing options.channel.topic" }
+  if (typeof Socket.constructor === 'function') {
+    return new Socket(uri, options)
+  } else {
+    return Socket(uri, options)
+  }
+}
 
+
+const getSocket = (sockets, options) => {
   if (options.logger === true) {
-    options.logger = (kind, msg, data) =>
-      console.log(`Apollo websocket ${kind}: ${msg}`, data)
+    options.logger = (kind, msg, data) => console.log(
+      `Apollo websocket ${kind}: ${msg}`, data)
   }
 
-  if(! sockets[uri]) {
-    sockets[uri] = {
-      conn: new Socket(uri, options),
-      channels: {}
-    }
+  const {uri} = options
+  if (! uri) throw 'Missing apollo websocket options.uri'
+
+  if (sockets[uri]) {
+    return sockets[uri]
   }
 
-  const socket = sockets[uri]
-  let chan = socket.channels[channel.topic]
+  return sockets[uri] = {
+    conn: createSocket(options),
+    channels: {}
+  }
+}
 
-  function joinChannel(resolve) {
-    if (! socket.conn.isConnected()) {
-      return socket.conn.connect()
-    }
-    if (! chan.conn) {
-      chan.conn = socket.conn.channel(channel.topic, channel.params || {})
-    }
-    if (!chan.conn.isJoined() && !chan.conn.isJoining()) {
-      chan.conn.join().receive("ok", _ => {
-        const queue = chan.queue
-        chan.queue = []
-        map(performWhenConnected.bind(null, chan), queue)
-      }).receive('error', err => {
-        chan.conn.leave()
-        chan.conn = null
-        chan.queue.pop()
-        resolve(err)
-      })
+const getChannel = (socket, options) => {
+  const {channel} = options
+
+  if (! channel) throw "Missing options.channel"
+  if (! channel.topic) throw "Missing options.channel.topic"
+
+  if (socket.channels[channel.topic]) {
+    return socket.channels[channel.topic]
+  } else {
+    return socket.channels[channel.topic] = {
+      conn: socket.conn.channel(channel.topic,
+                                channel.params || {}),
+      queue: []
     }
   }
+}
 
+const socketConnect = (sockets, options) => new Promise((resolve, reject) => {
+  const socket = getSocket(sockets, options)
+  if (socket.conn.isConnected()) {
+    resolve(socket)
+  } else {
+    socket.conn.onOpen(_ => resolve(socket))
+    socket.conn.onError(reject)
+    socket.conn.connect()
+  }
+})
+
+
+const channelJoin = (socket, options) => new Promise((resolve, reject) => {
+  const channel = getChannel(socket, options)
+  if (channel.conn.joinedOnce) {
+    resolve(channel)
+  } else if (!channel.conn.isJoining()){
+    channel.conn.join()
+      .receive('ok', _ => resolve(channel))
+      .receive('error', reject)
+      .receive('timeout', reject)
+  }
+})
+
+const queryMessage = ({channel}) => channel.queryMessage || channel.in_msg || 'gql'
+
+const sendQuery = (channel, context) => new Promise((resolve, reject) => {
+  const {options, request} = context
+
+  const message = queryMessage(options)
+  const payload = printRequest(request)
+
+  channel.conn.push(message, payload)
+    .receive('ok', resolve)
+    .receive('error', reject)
+    .receive('timeout', reject)
+})
+
+const subscribeMessage = ({channel}) => channel.subscribeMessage || 'subscribe'
+
+const sendSubscribe = (channel, context) => new Promise((resolve, reject) => {
+  const {options, request} = context
+
+  const message = queryMessage(options)
+  const payload = printRequest(request)
+
+  channel.conn.push(message, payload)
+    .receive('ok', resolve)
+    .receive('error', reject)
+    .receive('timeout', reject)
+
+})
+
+const perform = (performer, sockets, context) => {
+  const {options} = context
+  const promise = pipeP(_ => socketConnect(sockets, options),
+                        socket => channelJoin(socket, options),
+                        channel => performer(channel, context))
+  return promise()
+    .catch(error => error) // always resolve to let middleware handle errors
+}
+
+const isEmptyOrNil = either(isEmpty, isNil)
+
+const responseData = ({response}) => {
   return new Promise(function (resolve, reject) {
-    if(! chan) {
-      chan = socket.channels[channel.topic] = {
-        conn: null,
-        queue: []
-      }
-      socket.conn.onOpen(joinChannel.bind(null, resolve))
-      socket.conn.onError(err => {
-        if (chan.conn && (chan.conn.isJoined() || chan.conn.isJoining())) {
-          chan.conn.leave()
-        }
-        chan.queue = []
-        resolve(err)
-      })
-    }
-    if (chan.conn && chan.conn.isJoined()) {
-      performWhenConnected(chan, {context, resolve, reject})
-    } else {
-      chan.queue.push({context, resolve, reject})
-      joinChannel(resolve)
-    }
-  })
-}
-
-function performQuery ({conn}, {context, resolve, reject}) {
-  const msg = chanMsg(context)
-  const payload = printRequest(context.request)
-  conn.push(msg, payload)
-    .receive("ok", resolve)
-    .receive("error", resolve)
-    .receive("timeout", reject.bind(null, 'timeout'))
-}
-
-function performSubscribe (processReponse, {conn}, {context, resolve, reject}) {
-  const msg = chanMsg(context)
-  // listen when subscription messages arrive
-  conn.on(msg, processReponse)
-  // the query will perform the subscription at server
-  performQuery({conn}, {context, resolve, reject})
-}
-
-function performUnsubscribe (processReponse, {conn}, {context}) {
-  const msg = chanMsg(context)
-  conn.off(msg, processReponse)
-}
-
-function responseData ({response}) {
-  return new Promise(function (resolve, reject) {
-    if (response.error){
-      reject(response)
-    } else if (response.data) {
+    if (isEmptyOrNil(response)) {
+      reject('No response')
+    } else if (!isEmptyOrNil(response.data)) {
       resolve(response)
     } else {
-      reject('No response')
+      reject(response)
     }
   })
 }
 
-function chanMsg(context) {
-  return context.options.channel.in_msg || 'gql'
-}
+const newSubscriptionId = _ =>
+      (Date.now().toString(36) + Math.random().toString(36).substr(2, 8)).toUpperCase()
 
 export function createNetworkInterface(ifaceOpts) {
   const sockets = {}
@@ -135,61 +155,33 @@ export function createNetworkInterface(ifaceOpts) {
   const use = map(item => middlewares.push(item))
   const useAfter = map(item => afterwares.push(item))
 
-  const requestMiddleware = (meta) => (request) => {
+  const requestMiddleware = (request) => {
     const options = clone(ifaceOpts)
-    return applyWares({...meta, request, options}, middlewares)
+    return applyWares({request, options}, middlewares)
   }
 
-  const responseMiddleware = (meta) => (response) => {
+  const responseMiddleware = (response) => {
     const options = clone(ifaceOpts)
-    return applyWares({...meta, response, options}, afterwares)
+    return applyWares({response, options}, afterwares)
   }
 
-  const doQuery = connect.bind(null, sockets, performQuery)
-  const query = pipeP(requestMiddleware({operation: 'query'}),
-                      doQuery,
-                      responseMiddleware({operation: 'query'}),
+  const query = pipeP(requestMiddleware,
+                      perform.bind(null, sendQuery, sockets),
+                      responseMiddleware,
                       responseData)
 
-  const subscriptions = {}
-
-  function subscribe (request, responseCallback) {
-    // An integer that can be used to unsubscribe later
-    const subID = new Date().getTime()
-
-    const adaptedResponse = pipeP(
-      responseMiddleware({operation: 'subscription'}), responseData)
-
-
-    const processReponse = (response) => {
-      /* expect a node like responseCallback(resp, error)
-         is this apollo compatible? */
-      adaptedResponse(response)
-        .then(responseCallback)
-        .catch(responseCallback.bind(null, null))
+  const subscribe = (request, subCallback) => {
+    const subscribeMiddleware = _ => {
+      const subscriptionId = newSubscriptionId()
+      const options = clone(ifaceOpts)
+      return applyWares({subscriptionId, request, options}, middlewares)
     }
 
-    subscriptions[subID] = processReponse
 
-    const doSubscribe = connect.bind(
-      null, sockets, performSubscribe.bind(null, processReponse))
-
-    const adaptedRequest = pipeP(
-      requestMiddleware({operation: 'subscription'}), doSubscribe)
-
-    adaptedRequest(request)
-      .then(subscribeReponse => null) // discard or processReponse?
-      .catch(error => {throw error}) // could not subscribe
-
-    return subID
+    return pipeP(subscribeMiddleware,
+                 perform.bind(null, sendSubscribe, sockets),
+                )()
   }
 
-  function unsubscribe (subID) {
-    const processReponse = subscriptions[subID]
-    const doUnsubscribe = connect.bind(
-      null, sockets, performUnsubscribe.bind(null, processReponse))
-    pipeP(requestMiddleware, doUnsubscribe)({subID})
-  }
-
-  return {query, use, useAfter, subscribe, unsubscribe}
+  return {query, use, useAfter, subscribe}
 }

@@ -9,11 +9,11 @@ describe('phoenix websockets networkInterface', function () {
   const socketConnected = {status: 'ok', response: 'socket connected'}
   const channelConnected = {status: 'ok', response: 'channel connected'}
 
-  const query = gql`{ example }`
+  const exampleGQL = gql`{ example }`
   const options = {
     uri: 'ws://example.com/socket',
     channel: {topic: 'gql:query'},
-    //logger: true
+    logger: false
   }
 
   beforeEach(function () {
@@ -32,10 +32,10 @@ describe('phoenix websockets networkInterface', function () {
     }
     iface.use([{applyMiddleware}])
 
-    iface.query({query}).then(({data}) => {
+    iface.query({exampleGQL}).then(({data}) => {
       assert(data.applied)
       done()
-    }).catch(console.log)
+    }).catch(assert.failure)
   })
 
   it('supports adding afterware with useAfter', function (done) {
@@ -50,7 +50,7 @@ describe('phoenix websockets networkInterface', function () {
     }
     iface.useAfter([{applyMiddleware}])
 
-    iface.query({query}).then(({data}) => {
+    iface.query({exampleGQL}).then(({data}) => {
       assert.deepEqual(data, {modified: true})
       done()
     }).catch(console.log)
@@ -61,7 +61,7 @@ describe('phoenix websockets networkInterface', function () {
     options.transport
       .addReply(_ => ({status: 'error', response: { error: 'socket not connected' }}))
       .addReply(_ => ({status: 'ok', response: "socket leaved"}))
-    iface.query({query}).catch(error => {
+    iface.query({exampleGQL}).catch(error => {
       assert.equal("socket not connected", error.error)
       done()
     })
@@ -72,7 +72,7 @@ describe('phoenix websockets networkInterface', function () {
     options.transport
       .addReply(_ => socketConnected)
       .addReply(_ => ({status: 'error', response: { error: 'channel join error' }}))
-    iface.query({query}).catch(error => {
+    iface.query({exampleGQL}).catch(error => {
       assert.equal('channel join error', error.error)
       done()
     })
@@ -83,7 +83,7 @@ describe('phoenix websockets networkInterface', function () {
     options.transport
       .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {/*empty no data, no error*/} }))
-    iface.query({query}).catch(error => {
+    iface.query({exampleGQL}).catch(error => {
       assert.equal('No response', error)
       done()
     })
@@ -94,7 +94,7 @@ describe('phoenix websockets networkInterface', function () {
     options.transport
       .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {data: 22}}))
-    iface.query({query}).then(({data}) => {
+    iface.query({exampleGQL}).then(({data}) => {
       assert.equal(22, data)
       done()
     })
@@ -105,14 +105,66 @@ describe('phoenix websockets networkInterface', function () {
     options.transport
       .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {error: 22}}))
-    iface.query({query}).catch(({error}) => {
+    iface.query({exampleGQL}).catch(({error}) => {
       assert.equal(22, error)
       done()
     })
   })
 
-  it('middleware context has operation value for query')
-  it('middleware context has operation value for subscription')
+  it('when joinedOnce enqueues query execution', function (done) {
+    const iface = createNetworkInterface(options)
+
+    options.transport
+      .addReply(_ => ({status: "ok", response: {on: 'first connection'}}))
+      .addReply(payload => ({status: "ok", response: {data: 'first query'}}))
+
+    iface.query({exampleGQL}).then(({data}) => {
+      assert.equal('first query', data)
+
+      // simulate server disconnection or app suspended
+      options.transport.close()
+
+      iface.query({exampleGQL}).then(({data}) => {
+        assert.equal('reconnected query', data)
+        done()
+      })
+
+      // simulate server connects again and responds to second query
+      options.transport
+        .addReply(_ => ({status: "ok", response: {on: 'reconnected'}}))
+        .addReply(payload => ({status: "ok", response: {data: 'reconnected query'}}))
+      options.transport.open()
+    })
+  })
+
+  it('middleware context for query has undefined subscriptionId', function (done) {
+    const iface = createNetworkInterface(options)
+    options.transport
+      .addReply(_ => socketConnected)
+      .addReply(payload => ({status: "ok", response: {data: payload}}))
+
+    const applyMiddleware = function (ctx, next) {
+      if (ctx.subscriptionId === undefined) { done() }
+      next()
+    }
+    iface.use([{applyMiddleware}])
+    iface.query({exampleGQL})
+  })
+
+  it('middleware context for subscription has subscriptionId', function (done) {
+    const iface = createNetworkInterface(options)
+    options.transport
+      .addReply(_ => socketConnected)
+      .addReply(payload => ({status: "ok", response: {data: payload}}))
+
+    const applyMiddleware = function (ctx, next) {
+      if (ctx.subscriptionId !== undefined) { done() }
+      next()
+    }
+    iface.use([{applyMiddleware}])
+    iface.subscribe({exampleGQL})
+  })
+
   it('subscribe uses middleware on request data to normalize channel options')
   it('subscribe uses afterware when response arrives')
   it('subscribe returns a subscription ID')
@@ -121,11 +173,14 @@ describe('phoenix websockets networkInterface', function () {
 
 })
 
+const SOCKET_STATES = {connecting: 0, open: 1, closing: 2, closed: 3}
+
 function FakeTransport () {
-  const SOCKET_STATES = {connecting: 0, open: 1, closing: 2, closed: 3}
+  let instance = null
 
   function transport (endpointURL) {
-    this.skipHeartbeat = true
+    instance = this
+    this.skipHeartbeat = false
     this.endpointURL = endpointURL
     this.readyState = SOCKET_STATES.closed
     this.send = function send(data) {
@@ -137,11 +192,9 @@ function FakeTransport () {
       this.onmessage({data: message})
     }.bind(this)
 
-    this._open = _ => {
-      this.readyState = SOCKET_STATES.open
-      this.onopen()
-    }
-    setTimeout(this._open, 0)
+    this.close = _ => _
+
+    setTimeout(transport.open, 0)
   }
 
   transport.replies = []
@@ -149,6 +202,17 @@ function FakeTransport () {
     transport.replies.push(reply)
     return transport
   }
+
+  transport.close = _ => {
+    instance.readyState = SOCKET_STATES.closed
+    instance.onclose({type: 'close', eventPhase: SOCKET_STATES.closing})
+  }
+
+  transport.open = _ => {
+    instance.readyState = SOCKET_STATES.open
+    instance.onopen()
+  }
+
 
   return transport
 }
