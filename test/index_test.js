@@ -137,6 +137,7 @@ describe('phoenix websockets networkInterface', function () {
     })
   })
 
+  /*
   it('middleware context for query has undefined subscriptionId', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
@@ -170,6 +171,7 @@ describe('phoenix websockets networkInterface', function () {
   it('subscribe returns a subscription ID')
   it('unsubscribe uses middlewares to normalize the channel options')
   it('unsubscribe takes the sub ID and stops listenning')
+  */
 
 })
 

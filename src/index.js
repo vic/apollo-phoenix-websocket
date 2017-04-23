@@ -1,6 +1,6 @@
 import {clone, pipeP, map, isEmpty, isNil, either} from 'ramda'
 import {printRequest} from 'apollo-client/transport/networkInterface'
-import {Socket as PhoenixSocket} from 'phoenix';
+import {Socket as PhoenixSocket} from 'phoenix'
 
 const applyWares = (ctx, wares) => {
   return new Promise(function (resolve, reject) {
@@ -94,7 +94,9 @@ const channelJoin = (socket, options) => new Promise((resolve, reject) => {
 
 const queryMessage = ({channel}) => channel.queryMessage || channel.in_msg || 'gql'
 
-const sendQuery = (channel, context) => new Promise((resolve, reject) => {
+const alwaysResolve = promiser => (...args) => promiser(...args).catch(err => err)
+
+const performQuery = ({channel, context}) => new Promise((resolve, reject) => {
   const {options, request} = context
 
   const message = queryMessage(options)
@@ -102,32 +104,59 @@ const sendQuery = (channel, context) => new Promise((resolve, reject) => {
 
   channel.conn.push(message, payload)
     .receive('ok', resolve)
+    .receive('ignore', resolve)
     .receive('error', reject)
     .receive('timeout', reject)
 })
 
-const subscribeMessage = ({channel}) => channel.subscribeMessage || 'subscribe'
+const subscriptionEventName = ({context}) => subscriptionResponse => new Promise((resolve, reject) => {
+  const {subscriptionEvent} = context.options.channel
+  if (typeof subscriptionEvent !== 'function') {
+    throw `
+expected options.channel.subscriptionEvent to be a function with signature:
 
-const sendSubscribe = (channel, context) => new Promise((resolve, reject) => {
-  const {options, request} = context
-
-  const message = queryMessage(options)
-  const payload = printRequest(request)
-
-  channel.conn.push(message, payload)
-    .receive('ok', resolve)
-    .receive('error', reject)
-    .receive('timeout', reject)
-
+  (subscriptionResponse, {options}) => subscriptionEventName
+`
+  }
+  resolve(subscriptionEvent(subscriptionResponse, context))
 })
 
-const perform = (performer, sockets, context) => {
+const subscribeToEvent = (subMeta) => eventName => new Promise((resolve, reject) => {
+  const {channel, context, subCallback, responseMiddleware} = subMeta
+  const handler = eventData => {
+    pipeP(
+      responseMiddleware,
+      responseContext => {
+        const {response} = responseContext
+        subCallback(/*error*/ null, response)
+        return responseContext
+      }
+    )(eventData)
+  }
+  channel.conn.on(eventName, handler)
+  const subscription = {
+    // TODO: send unsubscribe message to server
+    unsubscribe: _ => channel.conn.off(eventName, handler)
+  }
+  resolve(subscription)
+})
+
+const performSubscribe = ({subCallback, responseMiddleware}) => ({channel, context}) => {
+  const subMeta = {channel, context, subCallback, responseMiddleware}
+  return pipeP(
+    performQuery,
+    subscriptionEventName(subMeta),
+    subscribeToEvent(subMeta)
+  )({channel, context})
+}
+
+const senderChannel = (sockets) => context => {
   const {options} = context
-  const promise = pipeP(_ => socketConnect(sockets, options),
-                        socket => channelJoin(socket, options),
-                        channel => performer(channel, context))
-  return promise()
-    .catch(error => error) // always resolve to let middleware handle errors
+  return pipeP(
+    _ => socketConnect(sockets, options),
+    socket => channelJoin(socket, options),
+    channel => ({channel, context})
+  )()
 }
 
 const isEmptyOrNil = either(isEmpty, isNil)
@@ -166,21 +195,17 @@ export function createNetworkInterface(ifaceOpts) {
   }
 
   const query = pipeP(requestMiddleware,
-                      perform.bind(null, sendQuery, sockets),
+                      senderChannel(sockets),
+                      alwaysResolve(performQuery),
                       responseMiddleware,
                       responseData)
 
   const subscribe = (request, subCallback) => {
-    const subscribeMiddleware = _ => {
-      const subscriptionId = newSubscriptionId()
-      const options = clone(ifaceOpts)
-      return applyWares({subscriptionId, request, options}, middlewares)
-    }
-
-
-    return pipeP(subscribeMiddleware,
-                 perform.bind(null, sendSubscribe, sockets),
-                )()
+    return pipeP(
+      requestMiddleware,
+      senderChannel(sockets),
+      performSubscribe({subCallback, responseMiddleware})
+    )(request)
   }
 
   return {query, use, useAfter, subscribe}
