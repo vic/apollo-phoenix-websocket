@@ -22,15 +22,9 @@ const applyWares = (ctx, wares) => {
 
 const createSocket = (options) => {
   const {uri} = options
-  const Socket = options.Socket || PhoenixSocket
-
-  if (typeof Socket.constructor === 'function') {
-    return new Socket(uri, options)
-  } else {
-    return Socket(uri, options)
-  }
+  const Socket = options.Socket || ((...args) => new PhoenixSocket(...args))
+  return Socket(uri, options)
 }
-
 
 const getSocket = (sockets, options) => {
   if (options.logger === true) {
