@@ -2,19 +2,22 @@ import R from 'ramda'
 import {printRequest} from 'apollo-client/transport/networkInterface'
 import {Socket as PhoenixSocket} from 'phoenix'
 
-export const absinthe = {
+export const ABSINTHE_OPTIONS = {
   channel: {
     topic: '__absinthe__:control',
     event: 'doc'
   },
-  subscription: (subResponse) => ({
+  subscription: subResponse => ({
     topic: subResponse.subscriptionId,
     event: 'subscription:data',
-    off: (subChannel, controlChannel) => {
+    map: payload => payload.result.data,
+    off: controlChannel => {
       controlChannel.push('unsubscribe', subResponse.subscriptionId)
-    }
+    },
   })
 }
+
+export const DEFAULT_OPTIONS = ABSINTHE_OPTIONS
 
 const applyWares = (ctx, wares) => {
   return new Promise(function (resolve, reject) {
@@ -113,9 +116,15 @@ that is, given the server's subscription response, it must return
 an object with two things, the topic and the event name
 where to expect incoming data for the subscription.
 
-For example, if you are using Absinthe subscriptions, this function can be like:
+For example, if you are using Absinthe backend, this function can be like:
 
-   ({subscriptionId}) => ({topic: subscriptionId, event: 'subscription:data'})
+   (subscriptionResponse) => ({
+      topic: subscriptionResponse.subscriptionId,
+      event: 'subscription:data',
+      // extract the data sent by Absinthe as expected by Apollo
+      map: (payload) => payload.result.data
+   })
+
 `
 
 const subscriptionOptions = (options) => subscriptionResponse => new Promise((resolve, reject) => {
@@ -127,48 +136,45 @@ const subscriptionOptions = (options) => subscriptionResponse => new Promise((re
   resolve(subOptions)
 })
 
-const subscribeToData = ({channel, subOptions, subCallback, responseMiddleware, controlChannel}) => new Promise((resolve, reject) => {
-  const {topic, event, off, filter} = subOptions
+const subscribeToFastlane = ({channel, subCallback, responseMiddleware}) => subOptions => new Promise((resolve, reject) => {
 
   const handleData = R.pipeP(
+    payload => Promise.resolve(payload),
+    (subOptions.map || R.identity),
     responseMiddleware,
     responseContext => {
       const {response} = responseContext
-      // Apollo expects just the subscription data not all the response
-      const {result: {data}} = response
-      subCallback(/*error*/ null, data)
+      subCallback(/*error*/ null, response)
       return responseContext
-    }
-  )
+    })
 
-  const filterF = filter || R.always(true)
-  const handler = data => filterF(data) && handleData(data)
-
-  const subscription = {
-    unsubscribe: _ => {
-      channel.off(event, handler)
-      typeof off === 'function' && off(channel, controlChannel)
-    }
+  const sub = {
+    handler: incoming =>
+      incoming.topic === subOptions.topic &&
+      incoming.event === subOptions.event &&
+      handleData(incoming.payload)
   }
 
-  channel.on(event, handler)
-  resolve(subscription)
+  // listen on the socket fastlane
+  channel.socket.onMessage(incoming => {
+    sub.handler && sub.handler(incoming)
+    return incoming
+  })
+
+  const unsubscribe = _ => {
+    delete sub.handler
+    (subOptions.off || R.identity)(channel)
+  }
+
+  resolve({unsubscribe})
 })
 
-const performSubscribe = ({sockets, subCallback, responseMiddleware}) => ({channel, context}) => {
-  const controlChannel = channel
+const performSubscribe = ({subCallback, responseMiddleware}) => ({channel, context}) => {
   return R.pipeP(
     performQuery,
     subscriptionOptions(context.options),
-    subOptions => R.pipeP(
-      _ => senderChannel(sockets)({options: {uri: context.options.uri, channel: subOptions}}),
-      ({channel}) => ({channel, subOptions})
-    )(),
-    ({channel, subOptions}) => subscribeToData({
-      channel, controlChannel,
-      subOptions, subCallback,
-      responseMiddleware})
-  )({channel: controlChannel, context})
+    subscribeToFastlane({channel, subCallback, responseMiddleware}),
+  )({channel, context})
 }
 
 const senderChannel = (sockets) => context => {
@@ -194,7 +200,9 @@ const responseData = ({response}) => {
   })
 }
 
-export function createNetworkInterface(ifaceOpts) {
+export function createNetworkInterface(opts) {
+  const ifaceOpts = R.mergeDeepRight(DEFAULT_OPTIONS, opts)
+
   const sockets = {}
   const middlewares = []
   const afterwares = []
@@ -221,7 +229,7 @@ export function createNetworkInterface(ifaceOpts) {
   const subscribe = (request, subCallback) => R.pipeP(
     requestMiddleware,
     senderChannel(sockets),
-    performSubscribe({sockets, subCallback, responseMiddleware})
+    performSubscribe({subCallback, responseMiddleware})
   )(request)
 
   return {query, use, useAfter, subscribe}
