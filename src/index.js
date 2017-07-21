@@ -1,6 +1,20 @@
-import {clone, pipeP, map, isEmpty, isNil, either} from 'ramda'
+import R from 'ramda'
 import {printRequest} from 'apollo-client/transport/networkInterface'
 import {Socket as PhoenixSocket} from 'phoenix'
+
+export const absinthe = {
+  channel: {
+    topic: '__absinthe__:control',
+    event: 'doc'
+  },
+  subscription: (subResponse) => ({
+    topic: subResponse.subscriptionId,
+    event: 'subscription:data',
+    off: (subChannel, controlChannel) => {
+      controlChannel.push('unsubscribe', subResponse.subscriptionId)
+    }
+  })
+}
 
 const applyWares = (ctx, wares) => {
   return new Promise(function (resolve, reject) {
@@ -28,38 +42,25 @@ const createSocket = (options) => {
 
 const getSocket = (sockets, options) => {
   if (options.logger === true) {
-    options.logger = (kind, msg, data) => console.log(
-      `Apollo websocket ${kind}: ${msg}`, data)
+    options.logger = (topic, msg, data) => console.log(
+      `Apollo websocket ${topic}: ${msg}`, data)
   }
 
   const {uri} = options
   if (! uri) throw 'Missing apollo websocket options.uri'
 
-  if (sockets[uri]) {
-    return sockets[uri]
-  }
-
-  return sockets[uri] = {
-    conn: createSocket(options),
-    channels: {}
-  }
+  return sockets[uri] || (
+    sockets[uri] = {
+      conn: createSocket(options),
+      channels: {}
+    })
 }
 
-const getChannel = (socket, options) => {
-  const {channel} = options
-
-  if (! channel) throw "Missing options.channel"
-  if (! channel.topic) throw "Missing options.channel.topic"
-
-  if (socket.channels[channel.topic]) {
-    return socket.channels[channel.topic]
-  } else {
-    return socket.channels[channel.topic] = {
-      conn: socket.conn.channel(channel.topic,
-                                channel.params || {}),
-      queue: []
-    }
-  }
+const getChannel = (socket, channelOptions) => {
+  if (!channelOptions || !channelOptions.topic) throw "Missing topic option"
+  const {topic, params} = channelOptions
+  return socket.channels[topic] ||
+    (socket.channels[topic] = socket.conn.channel(topic, params || {}))
 }
 
 const socketConnect = (sockets, options) => new Promise((resolve, reject) => {
@@ -74,86 +75,112 @@ const socketConnect = (sockets, options) => new Promise((resolve, reject) => {
 })
 
 
-const channelJoin = (socket, options) => new Promise((resolve, reject) => {
-  const channel = getChannel(socket, options)
-  if (channel.conn.joinedOnce) {
+const channelJoin = (socket, channelOptions) => new Promise((resolve, reject) => {
+  const channel = getChannel(socket, channelOptions)
+  if (channel.joinedOnce) {
     resolve(channel)
-  } else if (!channel.conn.isJoining()){
-    channel.conn.join()
+  } else if (!channel.isJoining()){
+    channel.join()
       .receive('ok', _ => resolve(channel))
       .receive('error', reject)
       .receive('timeout', reject)
   }
 })
 
-const queryMessage = ({channel}) => channel.queryMessage || channel.in_msg || 'gql'
+const docEvent= ({channel}) => channel.event || channel.in_msg || 'doc'
 
 const alwaysResolve = promiser => (...args) => promiser(...args).catch(err => err)
 
 const performQuery = ({channel, context}) => new Promise((resolve, reject) => {
   const {options, request} = context
 
-  const message = queryMessage(options)
+  const message = docEvent(options)
   const payload = printRequest(request)
 
-  channel.conn.push(message, payload)
+  channel.push(message, payload)
     .receive('ok', resolve)
     .receive('ignore', resolve)
     .receive('error', reject)
     .receive('timeout', reject)
 })
 
-const subscriptionEventName = ({context}) => subscriptionResponse => new Promise((resolve, reject) => {
-  const {subscriptionEvent} = context.options.channel
-  if (typeof subscriptionEvent !== 'function') {
-    throw `
-expected options.channel.subscriptionEvent to be a function with signature:
+const NO_SUBSCRIPTION_OPTIONS = `
+expected options.subscription to be a function with signature:
 
-  (subscriptionResponse, {options}) => subscriptionEventName
+   subscriptionResponse => ({topic, event})
+
+that is, given the server's subscription response, it must return
+an object with two things, the topic and the event name
+where to expect incoming data for the subscription.
+
+For example, if you are using Absinthe subscriptions, this function can be like:
+
+   ({subscriptionId}) => ({topic: subscriptionId, event: 'subscription:data'})
 `
+
+const subscriptionOptions = (options) => subscriptionResponse => new Promise((resolve, reject) => {
+  const {subscription} = options
+  const subOptions = typeof subscription === 'function' ? subscription(subscriptionResponse) : {}
+  if (typeof subOptions !== 'object' || !subOptions.topic || !subOptions.event) {
+    throw NO_SUBSCRIPTION_OPTIONS
   }
-  resolve(subscriptionEvent(subscriptionResponse, context))
+  resolve(subOptions)
 })
 
-const subscribeToEvent = (subMeta) => eventName => new Promise((resolve, reject) => {
-  const {channel, context, subCallback, responseMiddleware} = subMeta
-  const handler = eventData => {
-    pipeP(
-      responseMiddleware,
-      responseContext => {
-        const {response} = responseContext
-        subCallback(/*error*/ null, response)
-        return responseContext
-      }
-    )(eventData)
-  }
-  channel.conn.on(eventName, handler)
+const subscribeToData = ({channel, subOptions, subCallback, responseMiddleware, controlChannel}) => new Promise((resolve, reject) => {
+  const {topic, event, off, filter} = subOptions
+
+  const handleData = R.pipeP(
+    responseMiddleware,
+    responseContext => {
+      const {response} = responseContext
+      // Apollo expects just the subscription data not all the response
+      const {result: {data}} = response
+      subCallback(/*error*/ null, data)
+      return responseContext
+    }
+  )
+
+  const filterF = filter || R.always(true)
+  const handler = data => filterF(data) && handleData(data)
+
   const subscription = {
-    // TODO: send unsubscribe message to server
-    unsubscribe: _ => channel.conn.off(eventName, handler)
+    unsubscribe: _ => {
+      channel.off(event, handler)
+      typeof off === 'function' && off(channel, controlChannel)
+    }
   }
+
+  channel.on(event, handler)
   resolve(subscription)
 })
 
-const performSubscribe = ({subCallback, responseMiddleware}) => ({channel, context}) => {
-  const subMeta = {channel, context, subCallback, responseMiddleware}
-  return pipeP(
+const performSubscribe = ({sockets, subCallback, responseMiddleware}) => ({channel, context}) => {
+  const controlChannel = channel
+  return R.pipeP(
     performQuery,
-    subscriptionEventName(subMeta),
-    subscribeToEvent(subMeta)
-  )({channel, context})
+    subscriptionOptions(context.options),
+    subOptions => R.pipeP(
+      _ => senderChannel(sockets)({options: {uri: context.options.uri, channel: subOptions}}),
+      ({channel}) => ({channel, subOptions})
+    )(),
+    ({channel, subOptions}) => subscribeToData({
+      channel, controlChannel,
+      subOptions, subCallback,
+      responseMiddleware})
+  )({channel: controlChannel, context})
 }
 
 const senderChannel = (sockets) => context => {
   const {options} = context
-  return pipeP(
+  return R.pipeP(
     _ => socketConnect(sockets, options),
-    socket => channelJoin(socket, options),
+    socket => channelJoin(socket, options.channel),
     channel => ({channel, context})
   )()
 }
 
-const isEmptyOrNil = either(isEmpty, isNil)
+const isEmptyOrNil = R.either(R.isEmpty, R.isNil)
 
 const responseData = ({response}) => {
   return new Promise(function (resolve, reject) {
@@ -167,40 +194,35 @@ const responseData = ({response}) => {
   })
 }
 
-const newSubscriptionId = _ =>
-      (Date.now().toString(36) + Math.random().toString(36).substr(2, 8)).toUpperCase()
-
 export function createNetworkInterface(ifaceOpts) {
   const sockets = {}
   const middlewares = []
   const afterwares = []
 
-  const use = map(item => middlewares.push(item))
-  const useAfter = map(item => afterwares.push(item))
+  const use = R.map(item => middlewares.push(item))
+  const useAfter = R.map(item => afterwares.push(item))
 
   const requestMiddleware = (request) => {
-    const options = clone(ifaceOpts)
+    const options = R.clone(ifaceOpts)
     return applyWares({request, options}, middlewares)
   }
 
   const responseMiddleware = (response) => {
-    const options = clone(ifaceOpts)
+    const options = R.clone(ifaceOpts)
     return applyWares({response, options}, afterwares)
   }
 
-  const query = pipeP(requestMiddleware,
+  const query = R.pipeP(requestMiddleware,
                       senderChannel(sockets),
                       alwaysResolve(performQuery),
                       responseMiddleware,
                       responseData)
 
-  const subscribe = (request, subCallback) => {
-    return pipeP(
-      requestMiddleware,
-      senderChannel(sockets),
-      performSubscribe({subCallback, responseMiddleware})
-    )(request)
-  }
+  const subscribe = (request, subCallback) => R.pipeP(
+    requestMiddleware,
+    senderChannel(sockets),
+    performSubscribe({sockets, subCallback, responseMiddleware})
+  )(request)
 
   return {query, use, useAfter, subscribe}
 }
