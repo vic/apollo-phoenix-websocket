@@ -38,7 +38,7 @@ import {createNetworkInterface} from 'apollo-phoenix-websocket'
 
 // Nothing to configure if you are using an Absinthe backend
 // Otherwise take a look at the Options section.
-const networkInterface = createNetworkInterface({uri: 'wss://example.com'})
+const networkInterface = createNetworkInterface({uri: 'ws://localhost:4000/socket'})
 
 const apollo = new ApolloClient({networkInterface})
 ```
@@ -46,8 +46,8 @@ const apollo = new ApolloClient({networkInterface})
 ## Options
 
 Most likely, (as you are looking for a phoenix-websocket transport) you might be using
-the [Absinthe] library to implement your GQL server. APW configured by default to work
-out of the box with an [Absinthe backend].
+the [Absinthe] library to implement your Elixir GQL server. APW is configured by default
+to work out of the box with an [Absinthe backend].
 
 But if need araises, you can supply some advanced options to customize how it works.
 Here's is a commented example of the options that you can set for APW:

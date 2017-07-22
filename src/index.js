@@ -118,13 +118,21 @@ where to expect incoming data for the subscription.
 
 For example, if you are using Absinthe backend, this function can be like:
 
-   (subscriptionResponse) => ({
-      topic: subscriptionResponse.subscriptionId,
-      event: 'subscription:data',
-      // extract the data sent by Absinthe as expected by Apollo
-      map: (payload) => payload.result.data
-   })
 
+    subResponse => ({
+      channel: {
+        topic: '__absinthe__:control',
+        event: 'doc'
+      },
+      subscription: subResponse => ({
+        topic: subResponse.subscriptionId,
+        event: 'subscription:data',
+        map: payload => payload.result.data,
+        off: controlChannel => {
+          controlChannel.push('unsubscribe', subResponse.subscriptionId)
+        },
+      })
+    })
 `
 
 const subscriptionOptions = (options) => subscriptionResponse => new Promise((resolve, reject) => {
@@ -162,8 +170,8 @@ const subscribeToFastlane = ({channel, subCallback, responseMiddleware}) => subO
   })
 
   const unsubscribe = _ => {
-    delete sub.handler
     (subOptions.off || R.identity)(channel)
+    delete sub.handler
   }
 
   resolve({unsubscribe})
@@ -232,5 +240,9 @@ export function createNetworkInterface(opts) {
     performSubscribe({subCallback, responseMiddleware})
   )(request)
 
-  return {query, use, useAfter, subscribe}
+  const unsubscribe = subscription => {
+    subscription.then(({unsubscribe}) => unsubscribe())
+  }
+
+  return {query, use, useAfter, subscribe, unsubscribe}
 }
