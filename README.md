@@ -1,5 +1,6 @@
 # APW - Apollo Phoenix Websocket
 
+<a href="https://www.npmjs.com/package/apollo-phoenix-websocket"><img src="https://img.shields.io/npm/v/apollo-phoenix-websocket.svg"></a>
 <a href="https://travis-ci.org/vic/apollo-phoenix-websocket"><img src="https://travis-ci.org/vic/apollo-phoenix-websocket.svg"></a>
 [![help maintain this lib](https://img.shields.io/badge/looking%20for%20maintainer-DM%20%40vborja-663399.svg)](https://twitter.com/vborja)
 
