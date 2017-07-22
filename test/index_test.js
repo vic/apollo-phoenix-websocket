@@ -6,7 +6,10 @@ import gql from 'graphql-tag'
 
 describe('phoenix websockets networkInterface', function () {
 
-  const query = gql`{ example }`
+  const socketConnected = {status: 'ok', response: 'socket connected'}
+  const channelConnected = {status: 'ok', response: 'channel connected'}
+
+  const exampleGQL = gql`{ example }`
   const options = {
     uri: 'ws://example.com/socket',
     channel: {topic: 'gql:query'},
@@ -20,7 +23,7 @@ describe('phoenix websockets networkInterface', function () {
   it('supports adding middleware with use', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {data: payload}}))
 
     const applyMiddleware = function (ctx, next) {
@@ -29,7 +32,7 @@ describe('phoenix websockets networkInterface', function () {
     }
     iface.use([{applyMiddleware}])
 
-    iface.query({query}).then(({data}) => {
+    iface.query({exampleGQL}).then(({data}) => {
       assert(data.applied)
       done()
     }).catch(assert.failure)
@@ -38,7 +41,7 @@ describe('phoenix websockets networkInterface', function () {
   it('supports adding afterware with useAfter', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {data: payload}}))
 
     const applyMiddleware = function (ctx, next) {
@@ -47,7 +50,7 @@ describe('phoenix websockets networkInterface', function () {
     }
     iface.useAfter([{applyMiddleware}])
 
-    iface.query({query}).then(({data}) => {
+    iface.query({exampleGQL}).then(({data}) => {
       assert.deepEqual(data, {modified: true})
       done()
     }).catch(console.log)
@@ -58,7 +61,7 @@ describe('phoenix websockets networkInterface', function () {
     options.transport
       .addReply(_ => ({status: 'error', response: { error: 'socket not connected' }}))
       .addReply(_ => ({status: 'ok', response: "socket leaved"}))
-    iface.query({query}).catch(error => {
+    iface.query({exampleGQL}).catch(error => {
       assert.equal("socket not connected", error.error)
       done()
     })
@@ -67,9 +70,9 @@ describe('phoenix websockets networkInterface', function () {
   it('rejects if not possible to join channel', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: 'ok', response: 'socket connected'}))
+      .addReply(_ => socketConnected)
       .addReply(_ => ({status: 'error', response: { error: 'channel join error' }}))
-    iface.query({query}).catch(error => {
+    iface.query({exampleGQL}).catch(error => {
       assert.equal('channel join error', error.error)
       done()
     })
@@ -78,9 +81,9 @@ describe('phoenix websockets networkInterface', function () {
   it('expects server to return data or error', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "ok", response: {}}))
-      .addReply(payload => ({status: "ok", response: {}}))
-    iface.query({query}).catch(error => {
+      .addReply(_ => socketConnected)
+      .addReply(payload => ({status: "ok", response: {/*empty no data, no error*/} }))
+    iface.query({exampleGQL}).catch(error => {
       assert.equal('No response', error)
       done()
     })
@@ -89,9 +92,9 @@ describe('phoenix websockets networkInterface', function () {
   it('query resolves with server data', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {data: 22}}))
-    iface.query({query}).then(({data}) => {
+    iface.query({exampleGQL}).then(({data}) => {
       assert.equal(22, data)
       done()
     })
@@ -100,9 +103,9 @@ describe('phoenix websockets networkInterface', function () {
   it('query rejects with server error', function (done) {
     const iface = createNetworkInterface(options)
     options.transport
-      .addReply(_ => ({status: "ok", response: {}}))
+      .addReply(_ => socketConnected)
       .addReply(payload => ({status: "ok", response: {error: 22}}))
-    iface.query({query}).catch(({error}) => {
+    iface.query({exampleGQL}).catch(({error}) => {
       assert.equal(22, error)
       done()
     })
@@ -115,13 +118,13 @@ describe('phoenix websockets networkInterface', function () {
       .addReply(_ => ({status: "ok", response: {on: 'first connection'}}))
       .addReply(payload => ({status: "ok", response: {data: 'first query'}}))
 
-    iface.query({query}).then(({data}) => {
+    iface.query({exampleGQL}).then(({data}) => {
       assert.equal('first query', data)
 
       // simulate server disconnection or app suspended
       options.transport.close()
 
-      iface.query({query}).then(({data}) => {
+      iface.query({exampleGQL}).then(({data}) => {
         assert.equal('reconnected query', data)
         done()
       })
@@ -133,6 +136,42 @@ describe('phoenix websockets networkInterface', function () {
       options.transport.open()
     })
   })
+
+  /*
+  it('middleware context for query has undefined subscriptionId', function (done) {
+    const iface = createNetworkInterface(options)
+    options.transport
+      .addReply(_ => socketConnected)
+      .addReply(payload => ({status: "ok", response: {data: payload}}))
+
+    const applyMiddleware = function (ctx, next) {
+      if (ctx.subscriptionId === undefined) { done() }
+      next()
+    }
+    iface.use([{applyMiddleware}])
+    iface.query({exampleGQL})
+  })
+
+  it('middleware context for subscription has subscriptionId', function (done) {
+    const iface = createNetworkInterface(options)
+    options.transport
+      .addReply(_ => socketConnected)
+      .addReply(payload => ({status: "ok", response: {data: payload}}))
+
+    const applyMiddleware = function (ctx, next) {
+      if (ctx.subscriptionId !== undefined) { done() }
+      next()
+    }
+    iface.use([{applyMiddleware}])
+    iface.subscribe({exampleGQL})
+  })
+
+  it('subscribe uses middleware on request data to normalize channel options')
+  it('subscribe uses afterware when response arrives')
+  it('subscribe returns a subscription ID')
+  it('unsubscribe uses middlewares to normalize the channel options')
+  it('unsubscribe takes the sub ID and stops listenning')
+  */
 
 })
 
