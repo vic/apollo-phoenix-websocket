@@ -89,7 +89,7 @@ createNetworkInterface({
 ## Middlewares
 
 You can use middlewares with `use` just like with
-the standard apollo network interface.
+the standard apollo network interface. For example, a middleware can set authorization token on every request.
 
 ```javascript
 networkInterface.use([{
@@ -97,11 +97,14 @@ networkInterface.use([{
     // Here you can modify the interface options, for example
     // you can change the socket/channel that will handle the request
     // For example for a channel expecting authenticated queries
-    options.channel.topic = "gql:secured"
-    options.channel.params = {token: "phoenix_token"}
+    options.channel.topic = "gql:restricted"
+    options.channel.params = {...paramsForTopicJoin}
 
     // Or Modify the request
     request.variables = {name: 'Luke'}
+    
+    // Or Just add authorization token
+    request.context = {authorization: 'jwt_token'}
 
     next()
   }
