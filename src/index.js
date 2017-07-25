@@ -119,20 +119,15 @@ where to expect incoming data for the subscription.
 For example, if you are using Absinthe backend, this function can be like:
 
 
-    subResponse => ({
-      channel: {
-        topic: '__absinthe__:control',
-        event: 'doc'
-      },
       subscription: subResponse => ({
         topic: subResponse.subscriptionId,
         event: 'subscription:data',
         map: payload => payload.result.data,
         off: controlChannel => {
           controlChannel.push('unsubscribe', subResponse.subscriptionId)
-        },
+        }
       })
-    })
+
 `
 
 const subscriptionOptions = (options) => subscriptionResponse => new Promise((resolve, reject) => {
