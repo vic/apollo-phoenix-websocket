@@ -5,7 +5,7 @@
 [![help maintain this lib](https://img.shields.io/badge/looking%20for%20maintainer-DM%20%40vborja-663399.svg)](https://twitter.com/vborja)
 
 
-This node module implements an [Apollo GraphQL Network Layer] using [Phoenix Channels]
+[Apollo] is a feature rich GQL client, APW implements an [Apollo GraphQL Network Layer] for it over [Phoenix Channels] allowing you to re-use a single bidirectional connection for executing your queries and mutations, the backend can send new data via subscriptions, and the Apollo client can update its internal store and update your views accordingly.
 
 Since version `0.6.0`, all Apollo operations are supported: queries, mutations, watchQueries (pooling) and
 subscriptions.
@@ -13,11 +13,7 @@ subscriptions.
 Using the [Apollo Client], queries and mutations resolve to promises, and watchQueries and
 subscriptions resolve to observables.
 
-See the Apollo client [documentation][Apollo Client] for more info on how to invoke your gql backend.
-
-For those wondering why to use Apollo instead of directly executing your GQL queries via a simple
-websocket, Apollo has an internal store that let's you optimize the queries and only ask for what it
-needs, much like Facebook's Relay does.
+See the Apollo client [documentation][Apollo Client] for more info on how to invoke your GQL backend.
 
 
 ## Installation
@@ -48,7 +44,7 @@ const apollo = new ApolloClient({networkInterface})
 
 Most likely, (as you are looking for a phoenix-websocket transport) you might be using
 the [Absinthe] library to implement your Elixir GQL server. APW is configured by default
-to work out of the box with an [Absinthe backend].
+to work out of the box with an [Absinthe backend](#absinthe-backend).
 
 But if need araises, you can supply some advanced options to customize how it works.
 Here's is a commented example of the options that you can set for APW:
@@ -147,6 +143,7 @@ If you want to provide feedback or even better if you want to contribute some co
 Possible thanks to the awesome work of [our contributors].
 
 
+[Apollo]: http://dev.apollodata.com/
 [Apollo Client]: http://dev.apollodata.com/core/apollo-client-api.html
 [Apollo GraphQL Network Layer]: http://dev.apollodata.com/core/network.html
 [Phoenix Channels]: http://www.phoenixframework.org/docs/channels
