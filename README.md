@@ -47,7 +47,8 @@ the [Absinthe] library to implement your Elixir GQL server. APW is configured by
 to work out of the box with an [Absinthe backend](#absinthe-backend).
 
 But if need araises, you can supply some advanced options to customize how it works.
-Here's is a commented example of the options that you can set for APW:
+Here's is a commented example of the options that you can set for APW, with
+their respective default values:
 
 
 ```javascript
@@ -72,7 +73,9 @@ createNetworkInterface({
 
     // what to do when unsubscribing
     off: controlChannel => {
-      controlChannel.push('unsubscribe', subscriptionResponse.subscriptionId)
+      controlChannel.push('unsubscribe', {
+        subscriptionId: subscriptionResponse.subscriptionId
+      })
     }
   }),
 
