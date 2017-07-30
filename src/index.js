@@ -13,7 +13,7 @@ export const ABSINTHE_OPTIONS = {
     map: payload => payload.result.data,
     off: controlChannel => {
       controlChannel.push('unsubscribe', {
-        subscriptionId: subscriptionResponse.subscriptionId
+        subscriptionId: subResponse.subscriptionId
       })
     },
   })
