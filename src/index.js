@@ -12,7 +12,9 @@ export const ABSINTHE_OPTIONS = {
     event: 'subscription:data',
     map: payload => payload.result.data,
     off: controlChannel => {
-      controlChannel.push('unsubscribe', subResponse.subscriptionId)
+      controlChannel.push('unsubscribe', {
+        subscriptionId: subscriptionResponse.subscriptionId
+      })
     },
   })
 }
@@ -124,7 +126,9 @@ For example, if you are using Absinthe backend, this function can be like:
         event: 'subscription:data',
         map: payload => payload.result.data,
         off: controlChannel => {
-          controlChannel.push('unsubscribe', subResponse.subscriptionId)
+          controlChannel.push('unsubscribe', {
+            subscriptionId: subResponse.subscriptionId
+          })
         }
       })
 
