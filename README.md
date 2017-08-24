@@ -54,7 +54,7 @@ their respective default values:
 ```javascript
 createNetworkInterface({
 
-  // The websockets endpoint to connect to, like wss://example.com:4000/socket
+  // The websockets endpoint to connect to, like ws://example.com:4000/socket
   uri: WS_URI,
 
   // how to send queries and mutations
