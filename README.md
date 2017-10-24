@@ -103,10 +103,13 @@ networkInterface.use([{
     request.variables = {name: 'Luke'}
     
     // Or Just add authorization token
-    request.context = {authorization: 'jwt_token'}
+    options.params = {
+      ...options.params,
+      auth_token: 'my-secret-token',
+    }
 
     next()
-  }
+  },
 }])
 ```
 
