@@ -122,8 +122,10 @@ apollo network interface. An example use-case is for error handling:
 networkInterface.useAfter([{
   applyAfterware({response, options}, next) {
     // throw an error that will trigger your error handler
-    if (response.error) {
-      throw new Error(response.error)
+    if (response.errors) {
+      response.errors.forEach(e => {
+        throw new Error(e.message);
+      });
     }
     next();
   }
