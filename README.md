@@ -105,7 +105,7 @@ networkInterface.use([{
     // Or Just add authorization token
     options.params = {
       ...options.params,
-      guardian_token: 'my-secret-token',
+      auth_token: 'my-secret-token',
     }
 
     next()
