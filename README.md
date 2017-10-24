@@ -26,7 +26,7 @@ npm install --save apollo-phoenix-websocket
 
 Just import the `createNetworkInterface` from APW and use it to create an ApolloClient.
 
-The `networkInterface` function takes an options object, the only required
+The `createNetworkInterface` function takes an options object, the only required
 property is `uri` which specifies your endpoint websocket address.
 
 ```javascript
@@ -109,7 +109,7 @@ networkInterface.use([{
     }
 
     next()
-  },
+  }
 }])
 ```
 
